@@ -554,7 +554,6 @@ void loop() {
   BatSoC = (BordSpannung - 10.5) * (100.0 - 0.0) / (14.9 - 10.5) + 0.0; // PB-Batterie im unbelasteten Zustand über Spannung
   // float BatSoC = analogInScale(BordSpannung, 15, 10, 100.0, 0.0, SoCError);
   
-  EngineHours(EngineOn);
   
   SendN2kTankLevel(FuelLevel, FuelLevelMax);  // Adjust max tank capacity
   SendN2kEngineData(MotorTemp, CoolantTemp, EngineRPM, Counter, BordSpannung);
