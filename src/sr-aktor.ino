@@ -47,7 +47,7 @@
 /**
  *  Set the information for other bus devices, which PGN messages we support
  */ 
-const unsigned long TransmitMessages[] PROGMEM = {127501L, // Binary Switch
+const unsigned long TransmitMessages[] PROGMEM = {127501L, // Binary Status Report
                                                   127502L, // Binary Switch Status
                                                   126208L, // B&G may use 126208 for commanding switches
                                                   0
