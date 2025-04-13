@@ -1,5 +1,5 @@
-{   "ssid": "Motordaten",
-    "IP": "192.168.15.30",
+{   "ssid": "BinarySwitch",
+    "IP": "192.168.15.25",
     "passwort": "12345678",
     "MotorOffset":"0.0",
     "CoolantOffset":"0.0",
