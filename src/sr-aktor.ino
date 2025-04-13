@@ -47,8 +47,9 @@
 /**
  *  Set the information for other bus devices, which PGN messages we support
  */ 
-const unsigned long TransmitMessages[] PROGMEM = {127502L, // Engine Rapid / RPM
-                                                  126208L, // Engine parameters dynamic
+const unsigned long TransmitMessages[] PROGMEM = {127501L, // Binary Switch
+                                                  127502L, // Binary Switch Status
+                                                  126208L, // B&G may use 126208 for commanding switches
                                                   0
                                                  };
 
@@ -148,8 +149,6 @@ void setup() {
 
 // Webconfig laden
   website();
-                                                           // starts the timer
-
   
 
 // Reserve enough buffer for sending all messages. This does not work on small memory devices like Uno or Mega

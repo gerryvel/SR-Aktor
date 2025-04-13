@@ -40,7 +40,7 @@ int i = 0;
 
 //Configuration Website
 #define PAGE_REFRESH 10 // x Sec.
-#define WEB_TITEL "Motordaten"
+#define WEB_TITEL "Binary Actor Module"
 String sHeapspace = "";
 
 //Configuration mit Webinterface
@@ -64,10 +64,10 @@ const bool  hide_SSID      = false;             // To disable SSID broadcast -> 
 const int   max_connection = 2;                 // Maximum simultaneous connected clients on the AP
 
 // Variables for WIFI-AP
-IPAddress IP = IPAddress(192, 168, 15, 30);
-IPAddress Gateway = IPAddress(192, 168, 15, 30);
+IPAddress IP = IPAddress(192, 168, 15, 25);
+IPAddress Gateway = IPAddress(192, 168, 15, 25);
 IPAddress NMask = IPAddress(255, 255, 255, 0);
-const char* AP_SSID = "Motordaten";
+const char* AP_SSID = "BinaryActor";
 const char* AP_PASSWORD  = "12345678";
 IPAddress AP_IP;
 IPAddress CL_IP;
