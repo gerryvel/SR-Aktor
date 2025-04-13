@@ -16,7 +16,7 @@
 #include <Preferences.h>
 
 // Versionierung
-#define Version "V2.7 vom 20.03.2025"  // Version
+#define Version "V0.9 vom 20.04.2025"  // Version
 
 /**
  * @brief Config NMEA2000
