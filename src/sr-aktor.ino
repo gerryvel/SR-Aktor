@@ -237,101 +237,48 @@ void SetNextUpdate(unsigned long &NextUpdate, unsigned long Period) {
 }
 
 /************************ n2k Datenfunktionen ***************************/
-/**
- * @brief Send PGN127506
- * 
- * @param BatteryVoltage 
- * @param SoC 
- * @param BatCapacity 
- */
-void SendN2kDCStatus(double BatteryVoltage, double SoC, double BatCapacity) {
-  static unsigned long SlowDataUpdated = InitNextUpdate(SlowDataUpdatePeriod, BatteryDCStatusSendOffset);
-  tN2kMsg N2kMsg;
-
-  if ( IsTimeToUpdate(SlowDataUpdated) ) {
-    SetNextUpdate(SlowDataUpdated, SlowDataUpdatePeriod);
-
-    Serial.printf("Voltage     : %3.1f V\n", BatteryVoltage);
-    Serial.printf("SoC         : %3.1f %\n", SoC);
-    Serial.printf("Capacity    : %3.1f Ah\n", BatCapacity);
-    // SetN2kDCStatus(N2kMsg,1,1,N2kDCt_Battery,56,92,38500,0.012, AhToCoulomb(420));
-    SetN2kDCStatus(N2kMsg, 1, 2, N2kDCt_Battery, SoC, 0,  N2kDoubleNA, BatteryVoltage, AhToCoulomb(55));
-    NMEA2000.SendMsg(N2kMsg);
-  }
-}
 
 /**
- * @brief Send PGN127508
+ * @brief Send PGN127502
  * 
- * @param BatteryVoltage 
+ * @param Switchbank 
  */
-void SendN2kBattery(double BatteryVoltage) {
-  static unsigned long SlowDataUpdated = InitNextUpdate(SlowDataUpdatePeriod, BatteryDCSendOffset);
-  tN2kMsg N2kMsg;
 
-  if ( IsTimeToUpdate(SlowDataUpdated) ) {
-    SetNextUpdate(SlowDataUpdated, SlowDataUpdatePeriod);
 
-    Serial.printf("Voltage     : %3.1f V\n", BatteryVoltage);
-
-    SetN2kDCBatStatus(N2kMsg, 2, BatteryVoltage, N2kDoubleNA, N2kDoubleNA, 1);
-    NMEA2000.SendMsg(N2kMsg);
-  }
+void SetN2kPGN127502(tN2kMsg &N2kMsg, unsigned char DeviceBankInstance, tN2kBinaryStatus BankStatus) {
+  N2kMsg.SetPGN(127502L);
+  N2kMsg.Priority=3;
+BankStatus = (BankStatus << 8) | DeviceBankInstance;
+N2kMsg.AddUInt64(BankStatus);
 }
 
-/**
- * @brief Send PGN 127505
- * 
- * @param level 
- * @param capacity 
- */
-void SendN2kTankLevel(double level, double capacity) {
-  static unsigned long SlowDataUpdated = InitNextUpdate(SlowDataUpdatePeriod, TankSendOffset);
+void SetSwitch(unsigned char DeviceBankInstance, uint8_t SwitchIndex, bool ItemStatus) {
+  tN2kBinaryStatus BankStatus;
   tN2kMsg N2kMsg;
 
-  if ( IsTimeToUpdate(SlowDataUpdated) ) {
-    SetNextUpdate(SlowDataUpdated, SlowDataUpdatePeriod);
-
-    Serial.printf("Fuel Level   : %3.1f %%\n", level);
-    Serial.printf("Fuel Capacity: %3.1f l\n", capacity);
-
-    SetN2kFluidLevel(N2kMsg, 0, N2kft_Fuel, level, capacity );
-    NMEA2000.SendMsg(N2kMsg);
-  }
+  N2kResetBinaryStatus(BankStatus);
+  N2kSetStatusBinaryOnStatus(BankStatus,ItemStatus?N2kOnOff_On:N2kOnOff_Off,SwitchIndex);
+  SetN2kSwitchBankCommand(N2kMsg,DeviceBankInstance,BankStatus);
+  NMEA2000.SendMsg(N2kMsg);
 }
 
+inline void SetN2kSwitchBankCommand(tN2kMsg &N2kMsg, unsigned char DeviceBankInstance, tN2kBinaryStatus BankStatus) {
+  SetN2kPGN127502(N2kMsg,DeviceBankInstance,BankStatus);
+}
 
-/**
- * @brief Send PGN 127488
- * 
- * @param RPM 
- */
-void SendN2kEngineRPM(double RPM) {
-  static unsigned long SlowDataUpdated = InitNextUpdate(SlowDataUpdatePeriod, RPMSendOffset);
+void SendSwitchControl(unsigned char DeviceBankInstance){
+  tN2kBinaryStatus BankStatus;
   tN2kMsg N2kMsg;
 
-  if ( IsTimeToUpdate(SlowDataUpdated) ) {
-    SetNextUpdate(SlowDataUpdated, SlowDataUpdatePeriod);
-
-    Serial.printf("Engine RPM  : %4.0f RPM \n", RPM);
-
-    SetN2kEngineParamRapid(N2kMsg, 0, RPM, N2kDoubleNA,  N2kInt8NA);
-
-    NMEA2000.SendMsg(N2kMsg);
-  }
+  SetN2kPGN127502(N2kMsg,DeviceBankInstance,BankStatus);
 }
-
 
 /************************************ Loop ***********************************/
 void loop() {
 
   LoopIndicator();
 
-  
-  
-  SendN2kTankLevel(FuelLevel, FuelLevelMax);  // Adjust max tank capacity
-  SendN2kBattery(BordSpannung);
-  SendN2kDCStatus(BordSpannung, BatSoC, Bat1Capacity);
+  SetSwitch(0,0,true); // Send Switch Bank Status
   
   NMEA2000.ParseMessages();
   int SourceAddress = NMEA2000.GetN2kSource();
@@ -357,10 +304,7 @@ void loop() {
  * 
  */
     webSocket.loop();
-    fCoolantTemp = CoolantTemp;
-    fMotorTemp = MotorTemp;
-    fBordSpannung = BordSpannung;
-    fDrehzahl = EngineRPM;
+  
     sCL_Status = sWifiStatus(WiFi.status());
     sAP_Station = WiFi.softAPgetStationNum();
     freeHeapSpace();
