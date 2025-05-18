@@ -8,10 +8,10 @@
 </head>
 <body>
     <br />
-    <p class="label"> K&uuml;hlwassertemperatur: %sCoolantTemp% &deg;C<br>
-                    Offset: %sCoolantOffset% &deg;C<br>
-                    Motortemperatur: %sMotorTemp% &deg;C<br>
-                    Offset: %sMotorOffset% &deg;C</p>
+    <p class="label">Relais Bezeichner<br>
+                    Relais 1: %sRelays1Name%<br>
+                    Relais 2: %sRelays2Name%<br>
+                    Relais 3: %sRelays3Name%</p>
     %CONFIGPLACEHOLDER%
     <script>
         function formToJson(form) {
@@ -19,9 +19,9 @@
             var SSID = form.SSID.value;
             var IP = form.IP.value;
             var Password = form.Password.value;
-            var CoolantOffset = form.CoolantOffset.value;
-            var MotorOffset = form.MotorOffset.value;
-            var Fuellstandmax = form.Fuellstandmax.value;
+            var sRelays1Name = form.sRelay1Name.value;
+            var sRelay2Name = form.sRelay2Name.value;
+            var sRelay3Name = form.sRelay3Name.value;
             var ADC1_Cal = form.ADC1_Cal.value;
             var ADC2_Cal = form.ADC2_Cal.value;
 
@@ -29,9 +29,9 @@
                 SSID: SSID,
                 IP: IP,
                 Password: Password,
-                CoolantOffset: CoolantOffset,
-                MotorOffset: MotorOffset,
-                Fuellstandmax: Fuellstandmax,
+                sRelay1Name: sRelay1Name,
+                sRelay2Name: sRelay2Name,
+                sRelay3Name: sRelay3Name,
                 ADC1_Cal: ADC1_Cal,
                 ADC2_Cal: ADC2_Cal
             });

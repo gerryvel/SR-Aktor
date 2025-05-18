@@ -13,11 +13,11 @@
 */
 
 /**
- * @file Motordaten.ino
+ * @file sr-aktor.ino
  * @author Gerry Sebb
- * @brief Motordaten NMEA2000
- * @version 2.7
- * @date 2025-03-20
+ * @brief Binaary switch NMEA2000
+ * @version 1.0
+ * @date 2025-04-18
  * 
  * @copyright Copyright (c) 2025
  * 
@@ -91,15 +91,17 @@ void setup() {
     IP = inet_addr(tAP_Config.wAP_IP);
     AP_SSID = tAP_Config.wAP_SSID;
     AP_PASSWORD = tAP_Config.wAP_Password;
-    fMotorOffset = atof(tAP_Config.wMotor_Offset);
-    fCoolantOffset = atof(tAP_Config.wCoolant_Offset);
-    FuelLevelMax = atof(tAP_Config.wFuellstandmax);
-    ADC_Calibration_Value1 = atof(tAP_Config.wADC1_Cal);
-    ADC_Calibration_Value2 = atof(tAP_Config.wADC2_Cal);
-    Serial.println("\nConfigdata : AP IP: " + IP.toString() + ", AP SSID: " + AP_SSID + " , Passwort: " + AP_PASSWORD + " , MotorTOffset: " + fMotorOffset + " , CoolantTOffset: " + fCoolantOffset + " read from file");
+    sRelay1Name = tAP_Config.wRelay1Name;
+    sRelay2Name = tAP_Config.wRelay2Name;
+    sRelay3Name = tAP_Config.wRelay3Name;
+    Serial.println("\nConfigdata : AP IP: " + IP.toString() + ", AP SSID: " + AP_SSID + " , Passwort: " + AP_PASSWORD + " , Relais1: " + sRelay1Name + " , Relais2: " + sRelay2Name + " read from file");
 
   // LED
   LEDInit();
+
+  // IO
+  pinMode(Relais[1,2,3], OUTPUT);
+  digitalWrite(Relais[1,2,3], LOW);
 
   // Boardinfo	
   /**
@@ -244,14 +246,6 @@ void SetNextUpdate(unsigned long &NextUpdate, unsigned long Period) {
  * @param Switchbank 
  */
 
-
-void SetN2kPGN127502(tN2kMsg &N2kMsg, unsigned char DeviceBankInstance, tN2kBinaryStatus BankStatus) {
-  N2kMsg.SetPGN(127502L);
-  N2kMsg.Priority=3;
-BankStatus = (BankStatus << 8) | DeviceBankInstance;
-N2kMsg.AddUInt64(BankStatus);
-}
-
 void SetSwitch(unsigned char DeviceBankInstance, uint8_t SwitchIndex, bool ItemStatus) {
   tN2kBinaryStatus BankStatus;
   tN2kMsg N2kMsg;
@@ -277,6 +271,13 @@ void SendSwitchControl(unsigned char DeviceBankInstance){
 void loop() {
 
   LoopIndicator();
+
+//Status Relais
+  K1_state = digitalRead(Relais[1]);
+  K2_state = digitalRead(Relais[2]);
+  K3_state = digitalRead(Relais[3]);
+
+
 
   SetSwitch(0,0,true); // Send Switch Bank Status
   

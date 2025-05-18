@@ -29,12 +29,15 @@ void LoopIndicator(){
   ErrorOff = false;
   ErrorOn = false;
 
-if (MotorTemp != -5.0 && CoolantTemp != -5.0){  
-  ErrorOff = true;
-}
-if (MotorTemp == -5.0 || CoolantTemp == -5.0){
-  ErrorOn = true;
-}
+//if (MotorTemp != -5.0 && CoolantTemp != -5.0){  
+//  ErrorOff = true;
+//}
+//if (MotorTemp == -5.0 || CoolantTemp == -5.0){
+//  ErrorOn = true;
+//}
+
+ErrorOff = true;
+
 if (ErrorOff == true ){
   LEDflash(LED(Green)); // flash for loop run without temp-failure
 }

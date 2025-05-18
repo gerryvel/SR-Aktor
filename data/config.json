@@ -1,9 +1,8 @@
 {   "ssid": "BinarySwitch",
     "IP": "192.168.15.25",
     "passwort": "12345678",
-    "MotorOffset":"0.0",
-    "CoolantOffset":"0.0",
-    "Fuellstandmax": "0.0",
-    "ADC1_Cal": "170.0",
+    "sRelay1Name": "Relay 1",
+    "sRelay2Name": "Relay 2",
+    "sRelay3Name": "Relay 3",
     "ADC2_Cal": "17.0"
 }

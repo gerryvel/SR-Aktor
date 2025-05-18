@@ -49,10 +49,9 @@ struct Web_Config
 	char wAP_IP[20];
 	char wAP_SSID[64];
 	char wAP_Password[12];
-	char wMotor_Offset[6];
-	char wCoolant_Offset[6];
-	char wFuellstandmax[6];
-	char wADC1_Cal[6];
+	char wRelay1Name[12];
+	char wRelay2Name[12];
+	char wRelay3Name[12];
 	char wADC2_Cal[6];
 };
 Web_Config tAP_Config;
@@ -151,5 +150,18 @@ double dVWR_WindSpeedms = 0;
 //Variable NMEA 0183 Stream
 const char *udpAddress = "192.168.30.255"; // Set network address for broadcast
 const int udpPort = 4444;                 // UDP port
+
+// SR-Board
+#define NUM_RELAYS  3		// Number of Relais
+#define RELAY_NO    true	// Relais NormallyOpen
+int Relais[NUM_RELAYS] = {25, 26, 27};
+int K1_state = LOW;
+int K2_state = LOW;
+int K3_state = LOW;
+String sRelay1Name = "";
+String sRelay2Name = "";
+String sRelay3Name = "";
+const char* PARAM_INPUT_1 = "relay";  
+const char* PARAM_INPUT_2 = "state";
 
 #endif  

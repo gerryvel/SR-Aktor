@@ -148,10 +148,9 @@ void readConfig(String filename) {
 			strcpy(tAP_Config.wAP_SSID, testDocument["SSID"] | "BinarySwitch");
 			strcpy(tAP_Config.wAP_IP, testDocument["IP"] | "192.168.15.30");
 			strcpy(tAP_Config.wAP_Password, testDocument["Password"] | "12345678");
-			strcpy(tAP_Config.wMotor_Offset, testDocument["MotorOffset"] | "0.0");
-      strcpy(tAP_Config.wCoolant_Offset, testDocument["CoolantOffset"] | "0.0");
-      strcpy(tAP_Config.wFuellstandmax, testDocument["Fuellstandmax"] | "0.0");
-      strcpy(tAP_Config.wADC1_Cal, testDocument["ADC1_Cal"] | "0.0");
+			strcpy(tAP_Config.wRelay1Name, testDocument["sRelais1"] | "Relais 1");
+      strcpy(tAP_Config.wRelay2Name, testDocument["sRelais2"] | "Relais 2");
+      strcpy(tAP_Config.wRelay3Name, testDocument["sRelais3"] | "Relais 3");
       strcpy(tAP_Config.wADC2_Cal, testDocument["ADC2_Cal"] | "0.0");
 		}
 		configFile.close();
@@ -350,6 +349,27 @@ char* toChar(String command){
     else{
       return 0;
     }
+}
+
+
+String relayState(int numRelay){
+  if(RELAY_NO){
+    if(digitalRead(Relais[numRelay-1])){
+      return "";
+    }
+    else {
+      return "checked";
+    }
+  }
+  else {
+    if(digitalRead(Relais[numRelay-1])){
+      return "checked";
+    }
+    else {
+      return "";
+    }
+  }
+  return "";
 }
 
 

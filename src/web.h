@@ -41,18 +41,15 @@ String processor(const String& var)
         buttons += "<p class=\"CInput\"><label>Password </label><input type = \"text\" name = \"Password\" value=\"";
         buttons += tAP_Config.wAP_Password;
         buttons += "\"/></p>";
-        buttons += "<p class=\"CInput\"><label>Oil Offset </label><input type = \"text\" name = \"MotorOffset\" value=\"";
-        buttons += tAP_Config.wMotor_Offset;
+        buttons += "<p class=\"CInput\"><label>Oil Offset </label><input type = \"text\" name = \"Relay1 Name\" value=\"";
+        buttons += tAP_Config.wRelay1Name;
         buttons += "\"/> &deg;C</p>";
-        buttons += "<p class=\"CInput\"><label>K&uuml;hlwasser Offset </label><input type = \"text\" name = \"CoolantOffset\" value=\"";
-        buttons += tAP_Config.wCoolant_Offset;
+        buttons += "<p class=\"CInput\"><label>K&uuml;hlwasser Offset </label><input type = \"text\" name = \"Relay2 Name\" value=\"";
+        buttons += tAP_Config.wRelay2Name;
         buttons += "\"/> &deg;C</p>";
-        buttons += "<p class=\"CInput\"><label>max. F&uuml;llstand </label><input type = \"text\" name = \"Fuellstandmax\" value=\"";
-        buttons += tAP_Config.wFuellstandmax;
+        buttons += "<p class=\"CInput\"><label>max. F&uuml;llstand </label><input type = \"text\" name = \"Relay3 Name\" value=\"";
+        buttons += tAP_Config.wRelay3Name;
         buttons += "\"/> l</p>";
-        buttons += "<p class=\"CInput\"><label>ADC1 Kalibrierung </label><input type = \"text\" name = \"ADC1_Cal\" value=\"";
-        buttons += tAP_Config.wADC1_Cal;
-        buttons += "\"/></p>";
         buttons += "<p class=\"CInput\"><label>ADC2 Kalibrierung </label><input type = \"text\" name = \"ADC2_Cal\" value=\"";
         buttons += tAP_Config.wADC2_Cal;
         buttons += "\"/></p>";
@@ -63,24 +60,33 @@ String processor(const String& var)
     return String();
 }
 
+// Placeholder with button section 
+String SwitchRelais(const String& var){
+  //Serial.println(var);
+  if(var == "BUTTONPLACEHOLDER"){
+    String buttons ="";
+    for(int i=1; i<=NUM_RELAYS; i++){
+      String relayStateValue = relayState(i);
+      buttons+= "<h4>Relais " + String(i) + "</h4><label class=\"switch\"><input type=\"checkbox\" onchange=\"toggleCheckbox(this)\" id=\"" + String(i) + "\" "+ relayStateValue +"><span class=\"slider\"></span></label>";
+    }
+    return buttons;
+  }
+  return String();
+}
+
+
 //Variables for website
 String sCL_Status = sWifiStatus(WiFi.status());
 
 String replaceVariable(const String& var)
 {
-    if (var == "sDrehzahl") return String(fDrehzahl, 1);
-    if (var == "sFuellstand") return String(FuelLevel, 1);
-    if (var == "sFuellstandmax") return String(FuelLevelMax, 1);
-    if (var == "sBordspannung") return String(fBordSpannung, 1);
-    if (var == "sCoolantTemp") return String(fCoolantTemp, 1);
-    if (var == "sMotorTemp") return String(fMotorTemp, 1);
-    if (var == "sCoolantOffset") return String(fCoolantOffset);
-    if (var == "sMotorOffset") return String(fMotorOffset);
-    if (var == "sMotorError") return String(motorErrorReported);
-    if (var == "sCoolantError") return String(coolantErrorReported);
+    if (var == "sRelay1Name") return sRelay1Name;
+  	if (var == "sRelay2Name") return sRelay2Name;
+    if (var == "sRelay3Name") return sRelay3Name;
+    if (var == "sK1_State") return String(K1_state);
+    if (var == "sK2_State") return String(K2_state);
+    if (var == "sK3_State") return String(K3_state);
     if (var == "sBoardInfo") return sBoardInfo;
-    if (var == "sADC1_Cal") return String(ADC_Calibration_Value1);
-    if (var == "sADC2_Cal") return String(ADC_Calibration_Value2);
     if (var == "sHeapspace") return sHeapspace;
     if (var == "sFS_USpace") return String(LittleFS.usedBytes());
     if (var == "sFS_TSpace") return String(LittleFS.totalBytes());
@@ -88,12 +94,12 @@ String replaceVariable(const String& var)
     if (var == "sAP_Clients") return String(sAP_Station);
     if (var == "sCL_Addr") return WiFi.localIP().toString();
     if (var == "sCL_Status") return String(sCL_Status);
-    if (var == "sOneWire_Status") return String(sOneWire_Status);
     if (var == "sVersion") return Version;
-    if (var == "sCounter") return String(Counter);
     if (var == "CONFIGPLACEHOLDER") return processor(var);
+    if (var == "BUTTONPLACEHOLDER") return SwitchRelais(var);
     return "NoVariable";
 }
+
 
 void website() {
     server.on("/favicon.ico", HTTP_GET, [](AsyncWebServerRequest *request){
@@ -145,5 +151,33 @@ void website() {
         }
         request->send(200, "text/plain", "Daten gespeichert");
     });
+    // Send a GET request to <ESP_IP>/update?relay=<inputMessage>&state=<inputMessage2>
+  server.on("/index.html", HTTP_GET, [] (AsyncWebServerRequest *request) {
+    String inputMessage;
+    String inputParam;
+    String inputMessage2;
+    String inputParam2;
+    // GET input1 value on <ESP_IP>/update?relay=<inputMessage>
+    if (request->hasParam(PARAM_INPUT_1) & request->hasParam(PARAM_INPUT_2)) {
+      inputMessage = request->getParam(PARAM_INPUT_1)->value();
+      inputParam = PARAM_INPUT_1;
+      inputMessage2 = request->getParam(PARAM_INPUT_2)->value();
+      inputParam2 = PARAM_INPUT_2;
+      if(RELAY_NO){
+        Serial.print("NO ");
+        digitalWrite(Relais[inputMessage.toInt()-1], !inputMessage2.toInt());
+      }
+      else{
+        Serial.print("NC ");
+        digitalWrite(Relais[inputMessage.toInt()-1], inputMessage2.toInt());
+      }
+    }
+    else {
+      inputMessage = "No message sent";
+      inputParam = "none";
+    }
+    Serial.println(inputMessage + inputMessage2);
+    request->send(200, "text/plain", "OK");
+  });
 }
 

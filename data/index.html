@@ -6,9 +6,26 @@
     <link rel="shortcut icon" type="image/x-icon" href="favicon.ico">
     <link rel="icon" href="data:,">
     <link rel="stylesheet" type="text/css" href="style.css">
-    <script src='gauge.min.js'></script>
     <meta http-equiv="refresh" content="5">
 </head>
+
+<p>Statusanzeige und Steuern</p>
+
+<p class="label">%sRelay1Name%: %sK1_State%</p>
+<p class="label">%sRelay2Name%: %sK2_State%</p>
+<p class="label">%sRelay3Name%: %sK3_State%</p>
+
+
+ %BUTTONPLACEHOLDER%
+<script>function toggleCheckbox(element) {
+  var xhr = new XMLHttpRequest();
+  if(element.checked){ xhr.open("GET", "/update?relay="+element.id+"&state=1", true); }
+  else { xhr.open("GET", "/update?relay="+element.id+"&state=0", true); }
+  xhr.send();
+}</script>
+
+
+
 <body>
    
     <ul class="bottomnav">
