@@ -155,12 +155,8 @@ const int udpPort = 4444;                 // UDP port
 #define NUM_RELAYS  3		// Number of Relais
 #define RELAY_NO    true	// Relais NormallyOpen
 int Relais[NUM_RELAYS] = {25, 26, 27};
-int K1_state = LOW;
-int K2_state = LOW;
-int K3_state = LOW;
-String sRelay1Name = "";
-String sRelay2Name = "";
-String sRelay3Name = "";
+int RelStatus[NUM_RELAYS] = {LOW,LOW,LOW};
+String sRelayName[NUM_RELAYS] = {"","",""};
 const char* PARAM_INPUT_1 = "relay";  
 const char* PARAM_INPUT_2 = "state";
 

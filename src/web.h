@@ -41,13 +41,13 @@ String processor(const String& var)
         buttons += "<p class=\"CInput\"><label>Password </label><input type = \"text\" name = \"Password\" value=\"";
         buttons += tAP_Config.wAP_Password;
         buttons += "\"/></p>";
-        buttons += "<p class=\"CInput\"><label>Oil Offset </label><input type = \"text\" name = \"Relay1 Name\" value=\"";
+        buttons += "<p class=\"CInput\"><label>Relais1 Name</label><input type = \"text\" name = \"Relay1 Name\" value=\"";
         buttons += tAP_Config.wRelay1Name;
         buttons += "\"/> &deg;C</p>";
-        buttons += "<p class=\"CInput\"><label>K&uuml;hlwasser Offset </label><input type = \"text\" name = \"Relay2 Name\" value=\"";
+        buttons += "<p class=\"CInput\"><label>Relais2 Name</label><input type = \"text\" name = \"Relay2 Name\" value=\"";
         buttons += tAP_Config.wRelay2Name;
         buttons += "\"/> &deg;C</p>";
-        buttons += "<p class=\"CInput\"><label>max. F&uuml;llstand </label><input type = \"text\" name = \"Relay3 Name\" value=\"";
+        buttons += "<p class=\"CInput\"><label>Relais3 Name</label><input type = \"text\" name = \"Relay3 Name\" value=\"";
         buttons += tAP_Config.wRelay3Name;
         buttons += "\"/> l</p>";
         buttons += "<p class=\"CInput\"><label>ADC2 Kalibrierung </label><input type = \"text\" name = \"ADC2_Cal\" value=\"";
@@ -80,12 +80,12 @@ String sCL_Status = sWifiStatus(WiFi.status());
 
 String replaceVariable(const String& var)
 {
-    if (var == "sRelay1Name") return sRelay1Name;
-  	if (var == "sRelay2Name") return sRelay2Name;
-    if (var == "sRelay3Name") return sRelay3Name;
-    if (var == "sK1_State") return String(K1_state);
-    if (var == "sK2_State") return String(K2_state);
-    if (var == "sK3_State") return String(K3_state);
+    if (var == "sRelay1Name") return sRelayName[1];
+  	if (var == "sRelay2Name") return sRelayName[2];
+    if (var == "sRelay3Name") return sRelayName[3];
+    if (var == "sK1_Status") return String(RelStatus[1]);
+    if (var == "sK2_Status") return String(RelStatus[2]);
+    if (var == "sK3_Status") return String(RelStatus[3]);
     if (var == "sBoardInfo") return sBoardInfo;
     if (var == "sHeapspace") return sHeapspace;
     if (var == "sFS_USpace") return String(LittleFS.usedBytes());
@@ -152,7 +152,7 @@ void website() {
         request->send(200, "text/plain", "Daten gespeichert");
     });
     // Send a GET request to <ESP_IP>/update?relay=<inputMessage>&state=<inputMessage2>
-  server.on("/index.html", HTTP_GET, [] (AsyncWebServerRequest *request) {
+  server.on("/update", HTTP_GET, [] (AsyncWebServerRequest *request) {
     String inputMessage;
     String inputParam;
     String inputMessage2;

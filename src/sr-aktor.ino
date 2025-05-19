@@ -273,11 +273,7 @@ void loop() {
   LoopIndicator();
 
 //Status Relais
-  K1_state = digitalRead(Relais[1]);
-  K2_state = digitalRead(Relais[2]);
-  K3_state = digitalRead(Relais[3]);
-
-
+  RelStatus[1,2,3] = digitalRead(Relais[1,2,3]);
 
   SetSwitch(0,0,true); // Send Switch Bank Status
   
