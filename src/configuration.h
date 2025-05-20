@@ -153,10 +153,15 @@ const int udpPort = 4444;                 // UDP port
 
 // SR-Board
 #define NUM_RELAYS  3		// Number of Relais
-#define RELAY_NO    true	// Relais NormallyOpen
+#define RELAY_NO    1	// Relais NormallyOpen
 int Relais[NUM_RELAYS] = {25, 26, 27};
-int RelStatus[NUM_RELAYS] = {LOW,LOW,LOW};
-String sRelayName[NUM_RELAYS] = {"","",""};
+int SwitchSet = 0;
+int Rel1Status = 0;
+int Rel2Status = 0;
+int Rel3Status = 0;
+String sRelay1Name = "";
+String sRelay2Name = "";
+String sRelay3Name = "";
 const char* PARAM_INPUT_1 = "relay";  
 const char* PARAM_INPUT_2 = "state";
 

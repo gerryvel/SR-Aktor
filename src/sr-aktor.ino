@@ -94,14 +94,18 @@ void setup() {
     sRelay1Name = tAP_Config.wRelay1Name;
     sRelay2Name = tAP_Config.wRelay2Name;
     sRelay3Name = tAP_Config.wRelay3Name;
-    Serial.println("\nConfigdata : AP IP: " + IP.toString() + ", AP SSID: " + AP_SSID + " , Passwort: " + AP_PASSWORD + " , Relais1: " + sRelay1Name + " , Relais2: " + sRelay2Name + " read from file");
+    Serial.println("\nConfigdata : AP IP: " + IP.toString() + ", AP SSID: " + AP_SSID + " , Passwort: " + AP_PASSWORD + " , Relais1: " + sRelay1Name + " , Relais2: " + sRelay2Name + " , Relais3: " + sRelay3Name + " read from file");
 
   // LED
   LEDInit();
 
   // IO
-  pinMode(Relais[1,2,3], OUTPUT);
-  digitalWrite(Relais[1,2,3], LOW);
+  pinMode(Relais[1], OUTPUT);
+  pinMode(Relais[2], OUTPUT);
+  pinMode(Relais[3], OUTPUT);
+  digitalWrite(Relais[1], 0);
+  digitalWrite(Relais[2], 0);
+  digitalWrite(Relais[3], 0);
 
   // Boardinfo	
   /**
@@ -272,8 +276,7 @@ void loop() {
 
   LoopIndicator();
 
-//Status Relais
-  RelStatus[1,2,3] = digitalRead(Relais[1,2,3]);
+
 
   SetSwitch(0,0,true); // Send Switch Bank Status
   
@@ -305,6 +308,10 @@ void loop() {
     sCL_Status = sWifiStatus(WiFi.status());
     sAP_Station = WiFi.softAPgetStationNum();
     freeHeapSpace();
+
+    Rel1Status = digitalRead(Relais[1]);
+    Rel2Status = digitalRead(Relais[2]);
+    Rel3Status = digitalRead(Relais[3]);
     
     /**
      * @brief Construct a new if object

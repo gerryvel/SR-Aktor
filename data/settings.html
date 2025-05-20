@@ -12,6 +12,7 @@
                     Relais 1: %sRelay1Name%<br>
                     Relais 2: %sRelay2Name%<br>
                     Relais 3: %sRelay3Name%</p>
+                    
     %CONFIGPLACEHOLDER%
     <script>
         function formToJson(form) {
@@ -22,7 +23,6 @@
             var sRelay1Name = form.sRelay1Name.value;
             var sRelay2Name = form.sRelay2Name.value;
             var sRelay3Name = form.sRelay3Name.value;
-            var ADC1_Cal = form.ADC1_Cal.value;
             var ADC2_Cal = form.ADC2_Cal.value;
 
             var jsonFormInfo = JSON.stringify({
@@ -32,7 +32,6 @@
                 sRelay1Name: sRelay1Name,
                 sRelay2Name: sRelay2Name,
                 sRelay3Name: sRelay3Name,
-                ADC1_Cal: ADC1_Cal,
                 ADC2_Cal: ADC2_Cal
             });
 

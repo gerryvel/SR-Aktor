@@ -41,18 +41,15 @@ String processor(const String& var)
         buttons += "<p class=\"CInput\"><label>Password </label><input type = \"text\" name = \"Password\" value=\"";
         buttons += tAP_Config.wAP_Password;
         buttons += "\"/></p>";
-        buttons += "<p class=\"CInput\"><label>Relais1 Name</label><input type = \"text\" name = \"Relay1 Name\" value=\"";
+        buttons += "<p class=\"CInput\"><label>Relais 1 Name </label><input type = \"text\" name = \"sRelay1Name\" value=\"";
         buttons += tAP_Config.wRelay1Name;
-        buttons += "\"/> &deg;C</p>";
-        buttons += "<p class=\"CInput\"><label>Relais2 Name</label><input type = \"text\" name = \"Relay2 Name\" value=\"";
+        buttons += "\"/> </p>";
+        buttons += "<p class=\"CInput\"><label>Relais 2 Name </label><input type = \"text\" name = \"sRelay2Name\" value=\"";
         buttons += tAP_Config.wRelay2Name;
-        buttons += "\"/> &deg;C</p>";
-        buttons += "<p class=\"CInput\"><label>Relais3 Name</label><input type = \"text\" name = \"Relay3 Name\" value=\"";
+        buttons += "\"/> </p>";
+        buttons += "<p class=\"CInput\"><label>Relais 3 Name </label><input type = \"text\" name = \"sRelay3Name\" value=\"";
         buttons += tAP_Config.wRelay3Name;
-        buttons += "\"/> l</p>";
-        buttons += "<p class=\"CInput\"><label>ADC2 Kalibrierung </label><input type = \"text\" name = \"ADC2_Cal\" value=\"";
-        buttons += tAP_Config.wADC2_Cal;
-        buttons += "\"/></p>";
+        buttons += "\"/> </p>";
         buttons += "<p class=\"button\"><input type=\"submit\" value=\"Speichern\"></p>";
         buttons += "</form>";
         return buttons;
@@ -62,7 +59,7 @@ String processor(const String& var)
 
 // Placeholder with button section 
 String SwitchRelais(const String& var){
-  //Serial.println(var);
+  Serial.println(var);
   if(var == "BUTTONPLACEHOLDER"){
     String buttons ="";
     for(int i=1; i<=NUM_RELAYS; i++){
@@ -80,12 +77,12 @@ String sCL_Status = sWifiStatus(WiFi.status());
 
 String replaceVariable(const String& var)
 {
-    if (var == "sRelay1Name") return sRelayName[1];
-  	if (var == "sRelay2Name") return sRelayName[2];
-    if (var == "sRelay3Name") return sRelayName[3];
-    if (var == "sK1_Status") return String(RelStatus[1]);
-    if (var == "sK2_Status") return String(RelStatus[2]);
-    if (var == "sK3_Status") return String(RelStatus[3]);
+    if (var == "sRelay1Name") return sRelay1Name;
+  	if (var == "sRelay2Name") return sRelay2Name;
+    if (var == "sRelay3Name") return sRelay3Name;
+    if (var == "sK1_Status") return String(Rel1Status);
+    if (var == "sK2_Status") return String(Rel2Status);
+    if (var == "sK3_Status") return String(Rel3Status);
     if (var == "sBoardInfo") return sBoardInfo;
     if (var == "sHeapspace") return sHeapspace;
     if (var == "sFS_USpace") return String(LittleFS.usedBytes());
@@ -151,7 +148,8 @@ void website() {
         }
         request->send(200, "text/plain", "Daten gespeichert");
     });
-    // Send a GET request to <ESP_IP>/update?relay=<inputMessage>&state=<inputMessage2>
+
+// Send a GET request to <ESP_IP>/update?relay=<inputMessage>&state=<inputMessage2>
   server.on("/update", HTTP_GET, [] (AsyncWebServerRequest *request) {
     String inputMessage;
     String inputParam;
@@ -165,7 +163,7 @@ void website() {
       inputParam2 = PARAM_INPUT_2;
       if(RELAY_NO){
         Serial.print("NO ");
-        digitalWrite(Relais[inputMessage.toInt()-1], !inputMessage2.toInt());
+        digitalWrite(Relais[inputMessage.toInt()]-1, !inputMessage2.toInt());
       }
       else{
         Serial.print("NC ");

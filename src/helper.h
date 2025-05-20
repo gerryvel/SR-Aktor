@@ -151,7 +151,6 @@ void readConfig(String filename) {
 			strcpy(tAP_Config.wRelay1Name, testDocument["sRelais1"] | "Relais 1");
       strcpy(tAP_Config.wRelay2Name, testDocument["sRelais2"] | "Relais 2");
       strcpy(tAP_Config.wRelay3Name, testDocument["sRelais3"] | "Relais 3");
-      strcpy(tAP_Config.wADC2_Cal, testDocument["ADC2_Cal"] | "0.0");
 		}
 		configFile.close();
 		Serial.println("Config - Datei geschlossen");
