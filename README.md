@@ -31,6 +31,12 @@ This project is part of [OpenBoatProject](https://open-boat-projects.org/)
 ![grafik](https://github.com/user-attachments/assets/f6119a11-2760-49e8-b35f-3bc5f063c6f3)
 ![grafik](https://github.com/user-attachments/assets/95d4d9c0-763f-456e-b900-4163e7338f9f)
 
+## Website
+
+![image](https://github.com/user-attachments/assets/2441b745-6de3-453a-989f-d68ef4060d7c)
+![image](https://github.com/user-attachments/assets/0d6cdb11-3c79-4dd9-9692-6c5469c97010)
+![image](https://github.com/user-attachments/assets/0192a261-f228-4831-9c6f-785e468ea3c9)
+
 
 ## Chartplotter
 
