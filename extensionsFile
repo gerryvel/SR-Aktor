@@ -5,7 +5,7 @@
 # Remove a hash to activate a line.
 
 # Overrides the project title.
-Title           = Motordaten NMEA2000
+Title           = BinarySwitch NMEA2000
 
 # Name of the company that produced this document.
 Company         = open boats projects
