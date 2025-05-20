@@ -66,7 +66,7 @@ const int   max_connection = 2;                 // Maximum simultaneous connecte
 IPAddress IP = IPAddress(192, 168, 15, 25);
 IPAddress Gateway = IPAddress(192, 168, 15, 25);
 IPAddress NMask = IPAddress(255, 255, 255, 0);
-const char* AP_SSID = "BinaryActor";
+const char* AP_SSID = "BinarySwitch";
 const char* AP_PASSWORD  = "12345678";
 IPAddress AP_IP;
 IPAddress CL_IP;
