@@ -99,7 +99,7 @@ void setup() {
   // LED
   LEDInit();
 
-  // IO
+  // IOinit
   pinMode(Relais[0], OUTPUT);
   pinMode(Relais[1], OUTPUT);
   pinMode(Relais[2], OUTPUT);
