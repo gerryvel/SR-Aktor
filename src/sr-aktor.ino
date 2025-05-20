@@ -15,9 +15,9 @@
 /**
  * @file sr-aktor.ino
  * @author Gerry Sebb
- * @brief Binaary switch NMEA2000
+ * @brief Binary switch NMEA2000
  * @version 1.0
- * @date 2025-04-18
+ * @date 2025-05-18
  * 
  * @copyright Copyright (c) 2025
  * 
@@ -322,6 +322,5 @@ void loop() {
       delay(1000); // give time for reboot page to load
       ESP.restart();
       }
-
 
 }
