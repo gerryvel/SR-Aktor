@@ -17,7 +17,7 @@ LogoFilename    = ./data/logo80.jpg
 Author          = Gerry Sebb
 
 # Type of document (e.g. Design Specification, User Manual, etc.).
-#DocumentType    = 
+#DocumentType    = Software Manual
 
 # Document tracking number.
 #DocumentId      = 
