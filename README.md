@@ -26,7 +26,7 @@ This project is part of [OpenBoatProject](https://open-boat-projects.org/)
 ![grafik](https://github.com/user-attachments/assets/a76ab02f-7445-425b-8801-30d6ab660022)
 
 ## PCB Layout
-PCB by Aisler: [Link]((https://aisler.net/p/OFGLZJKF)
+PCB by Aisler: [Link](https://aisler.net/p/OFGLZJKF)
 
 ![grafik](https://github.com/user-attachments/assets/3358ef15-9ed8-4177-b05a-7ee3ab6d36b8)
 ![grafik](https://github.com/user-attachments/assets/60774f45-cd2a-4a4e-9cc4-e0a1b8fb4fe3)
