@@ -33,7 +33,7 @@ PCB by Aisler: [Link](https://aisler.net/p/OFGLZJKF)
 
 ## Website
 
-![image](https://github.com/user-attachments/assets/2441b745-6de3-453a-989f-d68ef4060d7c)
+![image](https://github.com/user-attachments/assets/e64baa68-10cb-4249-8e0e-04930d29992f)
 ![image](https://github.com/user-attachments/assets/0d6cdb11-3c79-4dd9-9692-6c5469c97010)
 ![image](https://github.com/user-attachments/assets/0192a261-f228-4831-9c6f-785e468ea3c9)
 
