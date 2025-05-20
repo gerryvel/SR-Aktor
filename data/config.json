@@ -3,6 +3,5 @@
     "passwort": "12345678",
     "sRelay1Name": "Relay 1",
     "sRelay2Name": "Relay 2",
-    "sRelay3Name": "Relay 3",
-    "ADC2_Cal": "17.0"
+    "sRelay3Name": "Relay 3"
 }

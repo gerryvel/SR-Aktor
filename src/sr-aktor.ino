@@ -100,12 +100,12 @@ void setup() {
   LEDInit();
 
   // IO
+  pinMode(Relais[0], OUTPUT);
   pinMode(Relais[1], OUTPUT);
   pinMode(Relais[2], OUTPUT);
-  pinMode(Relais[3], OUTPUT);
+  digitalWrite(Relais[0], 0);
   digitalWrite(Relais[1], 0);
   digitalWrite(Relais[2], 0);
-  digitalWrite(Relais[3], 0);
 
   // Boardinfo	
   /**
@@ -309,9 +309,9 @@ void loop() {
     sAP_Station = WiFi.softAPgetStationNum();
     freeHeapSpace();
 
-    Rel1Status = digitalRead(Relais[1]);
-    Rel2Status = digitalRead(Relais[2]);
-    Rel3Status = digitalRead(Relais[3]);
+    Rel1Status = digitalRead(Relais[0]);
+    Rel2Status = digitalRead(Relais[1]);
+    Rel3Status = digitalRead(Relais[2]);
     
     /**
      * @brief Construct a new if object

@@ -23,7 +23,6 @@
             var sRelay1Name = form.sRelay1Name.value;
             var sRelay2Name = form.sRelay2Name.value;
             var sRelay3Name = form.sRelay3Name.value;
-            var ADC2_Cal = form.ADC2_Cal.value;
 
             var jsonFormInfo = JSON.stringify({
                 SSID: SSID,
@@ -31,8 +30,7 @@
                 Password: Password,
                 sRelay1Name: sRelay1Name,
                 sRelay2Name: sRelay2Name,
-                sRelay3Name: sRelay3Name,
-                ADC2_Cal: ADC2_Cal
+                sRelay3Name: sRelay3Name              
             });
 
             xhr.open("POST", "/settings.html?save=" + jsonFormInfo, true);
@@ -61,7 +59,6 @@
 
     <ul class="bottomnav">
         <li><a href="/">Home</a></li>
-        <li><a href="werte.html">Werte</a></li>
         <li><a class="active" href="settings.html">Settings</a></li>
         <li><a href="system.html">System</a></li>
         <li class="right"><a href="ueber.html">About</a></li>

@@ -162,7 +162,5 @@ int Rel3Status = 0;
 String sRelay1Name = "";
 String sRelay2Name = "";
 String sRelay3Name = "";
-const char* PARAM_INPUT_1 = "relay";  
-const char* PARAM_INPUT_2 = "state";
 
 #endif  

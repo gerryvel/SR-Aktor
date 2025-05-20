@@ -124,9 +124,6 @@ void website() {
         request->send(LittleFS, "/reboot.html", String(), false, processor);
         IsRebootRequired = true;
     });
-    server.on("/gauge.min.js", HTTP_GET, [](AsyncWebServerRequest* request) {
-        request->send(LittleFS, "/gauge.min.js");
-    });
     server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest *request) {
         request->send(LittleFS, "/style.css", "text/css");
     });
@@ -148,34 +145,32 @@ void website() {
         }
         request->send(200, "text/plain", "Daten gespeichert");
     });
-
+  
 // Send a GET request to <ESP_IP>/update?relay=<inputMessage>&state=<inputMessage2>
-  server.on("/update", HTTP_GET, [] (AsyncWebServerRequest *request) {
-    String inputMessage;
-    String inputParam;
-    String inputMessage2;
-    String inputParam2;
-    // GET input1 value on <ESP_IP>/update?relay=<inputMessage>
-    if (request->hasParam(PARAM_INPUT_1) & request->hasParam(PARAM_INPUT_2)) {
-      inputMessage = request->getParam(PARAM_INPUT_1)->value();
-      inputParam = PARAM_INPUT_1;
-      inputMessage2 = request->getParam(PARAM_INPUT_2)->value();
-      inputParam2 = PARAM_INPUT_2;
-      if(RELAY_NO){
-        Serial.print("NO ");
-        digitalWrite(Relais[inputMessage.toInt()]-1, !inputMessage2.toInt());
-      }
-      else{
-        Serial.print("NC ");
-        digitalWrite(Relais[inputMessage.toInt()-1], inputMessage2.toInt());
-      }
+    server.on("/update", HTTP_GET, [] (AsyncWebServerRequest *request) {
+      if (request->hasParam("relay") && request->hasParam("state")){
+        String relayIdStr = request->getParam("relay")->value();
+        String relayStateStr = request->getParam("state")->value();
+
+        int relayIndex = relayIdStr.toInt()-1;
+        int state = relayStateStr.toInt();
+
+        if (relayIndex >= 0 && relayIndex < NUM_RELAYS) {
+            if (RELAY_NO) {
+                Serial.print("NO ");
+                digitalWrite(Relais[relayIndex], !state);
+            } else {
+                Serial.print("NC ");
+                digitalWrite(Relais[relayIndex], state);
+            }
+        } else {
+            Serial.println("Ungültiger Relais-Index");
+        }
+
+        Serial.println("Relais: " + relayIdStr + " Zustand: " + relayStateStr);
+        request->send(200, "text/plain", "OK");
+      } else {
+        request->send(400, "text/plain", "Fehlende Parameter");
     }
-    else {
-      inputMessage = "No message sent";
-      inputParam = "none";
-    }
-    Serial.println(inputMessage + inputMessage2);
-    request->send(200, "text/plain", "OK");
   });
 }
-
