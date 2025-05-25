@@ -268,18 +268,43 @@ void SendSwitchControl(unsigned char DeviceBankInstance){
   tN2kBinaryStatus BankStatus;
   tN2kMsg N2kMsg;
 
-  SetN2kPGN127502(N2kMsg,DeviceBankInstance,BankStatus);
+  SetN2kPGN127502(N2kMsg,DeviceBankInstance,BankStatus);  //Note that B&G may use 126208 for commanding switches.
 }
+
+void SendN2kSwitchBankStatus(bool Status1, bool Status2, bool Status3) {
+  static unsigned long SlowDataUpdated = InitNextUpdate(SlowDataUpdatePeriod, BatteryDCSendOffset);
+  tN2kMsg N2kMsg;
+
+  if ( IsTimeToUpdate(SlowDataUpdated) ) {
+    SetNextUpdate(SlowDataUpdated, SlowDataUpdatePeriod);
+
+    Serial.printf("R1 Status     : %s \n", Status1 ? "On" : "Off");
+    Serial.printf("R2 Status     : %s \n", Status2 ? "On" : "Off");
+    Serial.printf("R3 Status     : %s \n", Status3 ? "On" : "Off");
+
+{
+  tN2kBinaryStatus BankStatus;
+  N2kResetBinaryStatus(BankStatus);
+  N2kSetStatusBinaryOnStatus(BankStatus, Status1 ? N2kOnOff_On : N2kOnOff_Off, 0);
+  N2kSetStatusBinaryOnStatus(BankStatus, Status2 ? N2kOnOff_On : N2kOnOff_Off, 1);
+  N2kSetStatusBinaryOnStatus(BankStatus, Status3 ? N2kOnOff_On : N2kOnOff_Off, 2);
+  SetN2kPGN127501(N2kMsg, 0, BankStatus);
+}
+  }
+     NMEA2000.SendMsg(N2kMsg);
+  }
+
+
+
 
 /************************************ Loop ***********************************/
 void loop() {
 
   LoopIndicator();
 
+  SendSwitchControl(0);
+  SendN2kSwitchBankStatus(Rel1Status, Rel2Status, Rel3Status);
 
-
-  SetSwitch(0,0,true); // Send Switch Bank Status
-  
   NMEA2000.ParseMessages();
   int SourceAddress = NMEA2000.GetN2kSource();
   if (SourceAddress != NodeAddress) { // Save potentially changed Source Address to NVS memory
@@ -303,7 +328,6 @@ void loop() {
  * @brief Actual Website Data
  * 
  */
-    webSocket.loop();
   
     sCL_Status = sWifiStatus(WiFi.status());
     sAP_Station = WiFi.softAPgetStationNum();
@@ -313,10 +337,10 @@ void loop() {
     Rel2Status = digitalRead(Relais[1]);
     Rel3Status = digitalRead(Relais[2]);
     
-    /**
-     * @brief Construct a new if object
-     * Reboot from Website
-     */
+/**
+ * @brief Construct a new if object
+ * Reboot from Website
+*/
   if (IsRebootRequired) {
       Serial.println("Rebooting ESP32: "); 
       delay(1000); // give time for reboot page to load
