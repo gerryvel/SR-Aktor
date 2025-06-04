@@ -30,8 +30,8 @@ Preferences preferences;             // Nonvolatile storage on ESP32 - To store 
 uint8_t chipid[6];
 uint32_t id = 0;
 int i = 0;
-#define EngineSendOffset 0
-#define TankSendOffset 40
+#define SwitchControlSendOffset 0
+#define SwitchStatusSendOffset 40
 #define RPMSendOffset 80
 #define BatteryDCSendOffset 120
 #define BatteryDCStatusSendOffset 160

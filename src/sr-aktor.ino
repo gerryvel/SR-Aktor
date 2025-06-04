@@ -260,19 +260,22 @@ void SetSwitch(unsigned char DeviceBankInstance, uint8_t SwitchIndex, bool ItemS
   NMEA2000.SendMsg(N2kMsg);
 }
 
+
 inline void SetN2kSwitchBankCommand(tN2kMsg &N2kMsg, unsigned char DeviceBankInstance, tN2kBinaryStatus BankStatus) {
   SetN2kPGN127502(N2kMsg,DeviceBankInstance,BankStatus);
 }
 
 void SendSwitchControl(unsigned char DeviceBankInstance){
   tN2kBinaryStatus BankStatus;
+  static unsigned long SlowDataUpdated = InitNextUpdate(SlowDataUpdatePeriod, SwitchControlSendOffset);
   tN2kMsg N2kMsg;
 
   SetN2kPGN127502(N2kMsg,DeviceBankInstance,BankStatus);  //Note that B&G may use 126208 for commanding switches.
+  NMEA2000.SendMsg(N2kMsg);
 }
 
 void SendN2kSwitchBankStatus(bool Status1, bool Status2, bool Status3) {
-  static unsigned long SlowDataUpdated = InitNextUpdate(SlowDataUpdatePeriod, BatteryDCSendOffset);
+  static unsigned long SlowDataUpdated = InitNextUpdate(SlowDataUpdatePeriod, SwitchStatusSendOffset);
   tN2kMsg N2kMsg;
 
   if ( IsTimeToUpdate(SlowDataUpdated) ) {
