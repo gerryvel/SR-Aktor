@@ -194,9 +194,9 @@ void setup() {
 
   Serial.println("Opening NMEA2000");
   if (NMEA2000.Open())
-    Serial.println(" NMEA2000 Initialized"\n);
+    Serial.println(" NMEA2000 Initialized\n");
   else
-    Serial.println(" NMEA2000 Initialized failed"\n);
+    Serial.println(" NMEA2000 Initialized failed\n");
 
 /**
  * @brief OTA
