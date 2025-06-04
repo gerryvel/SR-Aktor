@@ -27,8 +27,6 @@
 #include "configuration.h"
 #include <Preferences.h>
 #include <ArduinoOTA.h>
-#include <OneWire.h>
-#include <DallasTemperature.h>
 #include <ESP_WiFi.h>
 #include <ESPAsyncWebServer.h>
 #include <NMEA2000_CAN.h>  // This will automatically choose right CAN library and create suitable NMEA2000 object
@@ -177,8 +175,8 @@ void setup() {
                                 );
 // Set device information
   NMEA2000.SetDeviceInformation(id, // Unique number. Use e.g. Serial number.
-                                140, // Device function=Analog to NMEA 2000 Gateway. See codes on http://www.nmea.org/Assets/20120726%20nmea%202000%20class%20&%20function%20codes%20v%202.00.pdf
-                                30, // Device class=Inter/Intranetwork Device. See codes on  http://www.nmea.org/Assets/20120726%20nmea%202000%20class%20&%20function%20codes%20v%202.00.pdf
+                                130, // Device function=Binary Event Monitor. See codes on See codes on https://web.archive.org/web/20190531120557/https://www.nmea.org/Assets/20120726%20nmea%202000%20class%20&%20function%20codes%20v%202.00.pdf
+                                30, // Device class=Inter/Intranetwork Device. See codes on  https://web.archive.org/web/20190531120557/https://www.nmea.org/Assets/20120726%20nmea%202000%20class%20&%20function%20codes%20v%202.00.pdf
                                 2046 // Just choosen free from code list on http://www.nmea.org/Assets/20121020%20nmea%202000%20registration%20list.pdf
                                );
 
@@ -193,7 +191,12 @@ void setup() {
 
   NMEA2000.SetMode(tNMEA2000::N2km_ListenAndNode, NodeAddress);
   NMEA2000.ExtendTransmitMessages(TransmitMessages);
-  NMEA2000.Open();
+
+  Serial.println("Opening NMEA2000");
+  if (NMEA2000.Open())
+    Serial.println(" NMEA2000 Initialized"\n);
+  else
+    Serial.println(" NMEA2000 Initialized failed"\n);
 
 /**
  * @brief OTA
@@ -303,8 +306,6 @@ void SendN2kSwitchBankStatus(bool Status1, bool Status2, bool Status3) {
 /************************************ Loop ***********************************/
 void loop() {
 
-  LoopIndicator();
-
   SendSwitchControl(0);
   SendN2kSwitchBankStatus(Rel1Status, Rel2Status, Rel3Status);
 
@@ -322,7 +323,7 @@ void loop() {
   if ( Serial.available() ) {
     Serial.read();
   }
-	
+
 
 // OTA	
 	ArduinoOTA.handle();
@@ -349,5 +350,8 @@ void loop() {
       delay(1000); // give time for reboot page to load
       ESP.restart();
       }
+
+	// LED Indicator
+    LoopIndicator();
 
 }
