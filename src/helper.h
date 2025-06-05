@@ -350,26 +350,4 @@ char* toChar(String command){
     }
 }
 
-
-String relayState(int numRelay){
-  if(RELAY_NO){
-    if(digitalRead(Relais[numRelay-1])){
-      return "";
-    }
-    else {
-      return "checked";
-    }
-  }
-  else {
-    if(digitalRead(Relais[numRelay-1])){
-      return "checked";
-    }
-    else {
-      return "";
-    }
-  }
-  return "";
-}
-
-
 #endif

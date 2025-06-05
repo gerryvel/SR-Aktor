@@ -11,6 +11,7 @@
  */
 
 #include "helper.h"
+#include "init.h"
 #include "configuration.h"
 #include "boardinfo.h"
 #include <ESPAsyncWebServer.h>
@@ -98,7 +99,7 @@ String replaceVariable(const String& var)
 }
 
 
-void website() {
+void initWebsite() {
     server.on("/favicon.ico", HTTP_GET, [](AsyncWebServerRequest *request){
         request->send(LittleFS, "/favicon.ico", "image/x-icon");
     });
