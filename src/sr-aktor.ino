@@ -15,9 +15,9 @@
 /**
  * @file sr-aktor.ino
  * @author Gerry Sebb
- * @brief Binary switch NMEA2000
+ * @brief Binary Switch NMEA2000
  * @version 1.0
- * @date 2025-05-18
+ * @date 2025-06-05
  * 
  * @copyright Copyright (c) 2025
  * 
