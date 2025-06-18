@@ -26,7 +26,7 @@ void initSerial() {
    * 
    */
 void initLittleFS() {  
-	if (!LittleFS.begin(true)) {
+	if (!LittleFS.begin(false)) {
 		Serial.println(F("An Error has occurred while mounting LittleFS"));
 		return;
 	}

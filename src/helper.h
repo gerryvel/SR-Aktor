@@ -148,9 +148,9 @@ void readConfig(String filename) {
 			strcpy(tAP_Config.wAP_SSID, testDocument["wAP_SSID"] | "BinarySwitch");
 			strcpy(tAP_Config.wAP_IP, testDocument["wAP_IP"] | "192.168.15.25");
 			strcpy(tAP_Config.wAP_Password, testDocument["wAP_Password"] | "12345678");
-			strcpy(tAP_Config.wRelay1Name, testDocument["wRelais1_Name"] | "Relais 1");
-      strcpy(tAP_Config.wRelay2Name, testDocument["wRelais2_Name"] | "Relais 2");
-      strcpy(tAP_Config.wRelay3Name, testDocument["wRelais3_Name"] | "Relais 3");
+			strcpy(tAP_Config.wRelay1Name, testDocument["wRelay1Name"] | "Relais 1");
+      strcpy(tAP_Config.wRelay2Name, testDocument["wRelay2Name"] | "Relais 2");
+      strcpy(tAP_Config.wRelay3Name, testDocument["wRelay3Name"] | "Relais 3");
 		}
 		configFile.close();
 		Serial.println("Config > file closed");

@@ -32,7 +32,7 @@ String processor(const String& var)
     if (var == "CONFIGPLACEHOLDER")
     {
         String buttons = "";
-        buttons += "<form onsubmit = \"event.preventDefault(); formToJson(this);\">";
+        buttons += "<form onsubmit = \"return formToJson(this);\">";
         buttons += "<p class=\"CInput\"><label>SSID </label><input type = \"text\" name = \"SSID\" value=\"";
         buttons += tAP_Config.wAP_SSID;
         buttons += "\"/></p>";
