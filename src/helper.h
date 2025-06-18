@@ -144,16 +144,16 @@ void readConfig(String filename) {
 
 		Serial.println("deserializeJson ok");
 		{
-			Serial.println("Lese Daten aus Config - Datei");
-			strcpy(tAP_Config.wAP_SSID, testDocument["SSID"] | "BinarySwitch");
-			strcpy(tAP_Config.wAP_IP, testDocument["IP"] | "192.168.15.30");
-			strcpy(tAP_Config.wAP_Password, testDocument["Password"] | "12345678");
-			strcpy(tAP_Config.wRelay1Name, testDocument["sRelais1"] | "Relais 1");
-      strcpy(tAP_Config.wRelay2Name, testDocument["sRelais2"] | "Relais 2");
-      strcpy(tAP_Config.wRelay3Name, testDocument["sRelais3"] | "Relais 3");
+			Serial.println("Read Data from Config - file");
+			strcpy(tAP_Config.wAP_SSID, testDocument["wAP_SSID"] | "BinarySwitch");
+			strcpy(tAP_Config.wAP_IP, testDocument["wAP_IP"] | "192.168.15.25");
+			strcpy(tAP_Config.wAP_Password, testDocument["wPassword"] | "12345678");
+			strcpy(tAP_Config.wRelay1Name, testDocument["wRelais1"] | "Relais 1");
+      strcpy(tAP_Config.wRelay2Name, testDocument["wRelais2"] | "Relais 2");
+      strcpy(tAP_Config.wRelay3Name, testDocument["wRelais3"] | "Relais 3");
 		}
 		configFile.close();
-		Serial.println("Config - Datei geschlossen");
+		Serial.println("Config > file closed");
 	}
 
 	else
@@ -172,41 +172,36 @@ void readConfig(String filename) {
 
 bool writeConfig(String json)
 {
-	Serial.println(json);
+    Serial.println(json);
+    Serial.println("neue Konfiguration speichern");
 
-	Serial.println("neue Konfiguration speichern");
+    // Datei zum Schreiben öffnen (überschreibt alte Datei)
+    File configFile = LittleFS.open("/config.json", "w");
+    if (!configFile) {
+        Serial.println("Config - Datei konnte nicht geöffnet werden!");
+        return false;
+    }
 
-	File configFile = LittleFS.open("/config.json", FILE_WRITE);
-	if (configFile)
-	{
-		Serial.println("Config - Datei öffnen");
-		File configFile = LittleFS.open("/config.json", FILE_WRITE);
-		if (configFile)
-		{
-			Serial.println("Config - Datei zum Schreiben geöffnet");
-			JsonDocument testDocument;
-			Serial.println("JSON - Daten übergeben");
-			DeserializationError error = deserializeJson(testDocument, json);
-			// Test if parsing succeeds.
-			if (error)
-			{
-				Serial.print(F("deserializeJson() failed: "));
-				Serial.println(error.f_str());
-				// bei Memory - Fehler den <Wert> in StaticJsonDocument<200> testDocument; erhöhen
-				return false;
-			}
-			Serial.println("Konfiguration schreiben...");
-			serializeJson(testDocument, configFile);
-			Serial.println("Konfiguration geschrieben...");
+    // JSON-Dokument parsen
+    JsonDocument testDocument;
+    DeserializationError error = deserializeJson(testDocument, json);
+    if (error) {
+        Serial.print(F("deserializeJson() failed: "));
+        Serial.println(error.f_str());
+        configFile.close();
+        return false;
+    }
 
-			// neue Config in Serial ausgeben zur Kontrolle
-			serializeJsonPretty(testDocument, Serial);
+    // JSON in Datei schreiben
+    serializeJson(testDocument, configFile);
+    Serial.println("Konfiguration geschrieben...");
 
-			Serial.println("Config - Datei geschlossen");
-			configFile.close();
-		}
-	}
-	return true;
+    // Kontrolle
+    serializeJsonPretty(testDocument, Serial);
+
+    configFile.close();
+    Serial.println("Config - Datei geschlossen");
+    return true;
 }
 
 /**
@@ -218,14 +213,14 @@ bool writeConfig(String json)
  * @return false 
  */
 
-bool writeConfig(const String& name, const String& value)
+bool writeWebconfig(const String& name, const String& value)
 {
-    Serial.println("neue Konfiguration speichern");
+    Serial.println("Config > safe config data");
 
     File configFile = LittleFS.open("/config.json", FILE_WRITE);
     if (configFile)
     {
-        Serial.println("Config - Datei öffnen");
+        Serial.println("Config > open file");
         JsonDocument testDocument;
         DeserializationError error = deserializeJson(testDocument, configFile);
         if (error)
@@ -248,12 +243,12 @@ bool writeConfig(const String& name, const String& value)
         }
 
         serializeJson(testDocument, configFile);
-        Serial.println("Konfiguration geschrieben...");
+        Serial.println("Config > write data...");
 
         // neue Config in Serial ausgeben zur Kontrolle
         serializeJsonPretty(testDocument, Serial);
 
-        Serial.println("Config - Datei geschlossen");
+        Serial.println("Config > closed file");
         configFile.close();
     }
     else

@@ -17,25 +17,19 @@
     <script>
         function formToJson(form) {
             var xhr = new XMLHttpRequest();
-            var SSID = form.SSID.value;
-            var IP = form.IP.value;
-            var Password = form.Password.value;
-            var sRelay1Name = form.sRelay1Name.value;
-            var sRelay2Name = form.sRelay2Name.value;
-            var sRelay3Name = form.sRelay3Name.value;
-
-            var jsonFormInfo = JSON.stringify({
-                SSID: SSID,
-                IP: IP,
-                Password: Password,
-                sRelay1Name: sRelay1Name,
-                sRelay2Name: sRelay2Name,
-                sRelay3Name: sRelay3Name              
+            var jsonFormInfo = JSON.stringify
+            ({
+            wSSID: form.SSID.value,
+            wIP: form.IP.value,
+            wPassword: form.Password.value,
+            wRelay1Name: form.sRelay1Name.value,
+            wRelay2Name: form.sRelay2Name.value,
+            wRelay3Name: form.sRelay3Name.value
             });
 
-            xhr.open("POST", "/settings.html?save=" + jsonFormInfo, true);
-            /* window.alert("Json function send end"); */
-            xhr.send();
+            xhr.open("POST", "/settings.html", true);
+            xhr.setRequestHeader("Content-Type", "application/json");
+            xhr.send(jsonFormInfo);
             window.alert("Gespeichert!");
         }
     </script>

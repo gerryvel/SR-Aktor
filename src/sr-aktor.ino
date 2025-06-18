@@ -39,15 +39,6 @@
 #include "LEDindicator.h"
 #include "init.h"
 
-#define ENABLE_DEBUG_LOG 0 // Debug log
-
-
-void debug_log(char* str) {
-#if ENABLE_DEBUG_LOG == 1
-  Serial.println(str);
-#endif
-}
-
 
 /******************************************* Setup *******************************************************/
 void setup() {
@@ -121,7 +112,7 @@ void setup() {
 // Webconfig laden
   initWebsite();
   
-// Init and start NMEA2000
+// Init NMEA2000
   initNMEA2000();
 
 /**
@@ -173,35 +164,10 @@ void SetNextUpdate(unsigned long &NextUpdate, unsigned long Period) {
 /************************ n2k Datenfunktionen ***************************/
 
 /**
- * @brief Send PGN127502
+ * @brief Send PGN127501
  * 
  * @param Switchbank 
  */
-
-void SetSwitch(unsigned char DeviceBankInstance, uint8_t SwitchIndex, bool ItemStatus) {
-  tN2kBinaryStatus BankStatus;
-  tN2kMsg N2kMsg;
-
-  N2kResetBinaryStatus(BankStatus);
-  N2kSetStatusBinaryOnStatus(BankStatus,ItemStatus?N2kOnOff_On:N2kOnOff_Off,SwitchIndex);
-  SetN2kSwitchBankCommand(N2kMsg,DeviceBankInstance,BankStatus);
-  NMEA2000.SendMsg(N2kMsg);
-}
-
-
-inline void SetN2kSwitchBankCommand(tN2kMsg &N2kMsg, unsigned char DeviceBankInstance, tN2kBinaryStatus BankStatus) {
-  SetN2kPGN127502(N2kMsg,DeviceBankInstance,BankStatus);
-}
-
-void SendSwitchControl(unsigned char DeviceBankInstance){
-  tN2kBinaryStatus BankStatus;
-  static unsigned long SlowDataUpdated = InitNextUpdate(SlowDataUpdatePeriod, SwitchControlSendOffset);
-  tN2kMsg N2kMsg;
-
-  SetN2kPGN127502(N2kMsg,DeviceBankInstance,BankStatus);  //Note that B&G may use 126208 for commanding switches.
-  NMEA2000.SendMsg(N2kMsg);
-}
-
 void SendN2kSwitchBankStatus(bool Status1, bool Status2, bool Status3) {
   static unsigned long SlowDataUpdated = InitNextUpdate(SlowDataUpdatePeriod, SwitchStatusSendOffset);
   tN2kMsg N2kMsg;
@@ -229,7 +195,6 @@ void SendN2kSwitchBankStatus(bool Status1, bool Status2, bool Status3) {
 /************************************ Loop ***********************************/
 void loop() {
 
-  SendSwitchControl(0);
   SendN2kSwitchBankStatus(Rel1Status, Rel2Status, Rel3Status);
 
   NMEA2000.ParseMessages();

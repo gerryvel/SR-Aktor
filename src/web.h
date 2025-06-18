@@ -130,20 +130,15 @@ void initWebsite() {
     });
     server.on("/settings.html", HTTP_POST, [](AsyncWebServerRequest *request)
     {
-        int count = request->params();
-        Serial.printf("Anzahl: %i\n", count);
-        for (int i = 0; i < count; i++)
-        {
-            AsyncWebParameter* p = request->getParam(i);
-            Serial.print("PWerte von der Internet - Seite: ");
-            Serial.print("Param name: ");
-            Serial.println(p->name());
-            Serial.print("Param value: ");
-            Serial.println(p->value());
-            Serial.println("------");
-            // p->value in die config schreiben
-            writeConfig(p->name(), p->value());
-        }
+       // Body wird asynchron empfangen!
+        }, NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+        String json = "";
+    for (size_t i = 0; i < len; i++) {
+        json += (char)data[i];
+    }
+            Serial.println("Empfangenes JSON (Body):");
+            Serial.println(json);
+            writeConfig(json);
         request->send(200, "text/plain", "Daten gespeichert");
     });
   

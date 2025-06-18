@@ -80,7 +80,11 @@ void initNMEA2000() {
   const unsigned long TransmitMessages[] PROGMEM = {127501L, // Binary Status Report
                                                     127502L, // Binary Switch Status
                                                     126208L, // B&G may use 126208 for commanding switches
-                                                   0
+                                                    130813L, // Binary Commanded Switch Status
+                                                    65283L, // Proprietary PGN for Binary Switches
+                                                    65284L, // Proprietary PGN for Binary Switches
+                                                    65290L, // Proprietary PGN for Binary Switches
+                                                    0
                                                    };
 
 
@@ -92,9 +96,9 @@ void initNMEA2000() {
                                 );
 // Set device information
   NMEA2000.SetDeviceInformation(id, // Unique number. Use e.g. Serial number.
-                                130, // Device function=Binary Event Monitor. See codes on See codes on https://web.archive.org/web/20190531120557/https://www.nmea.org/Assets/20120726%20nmea%202000%20class%20&%20function%20codes%20v%202.00.pdf
+                                140, // Device function=Binary Event Monitor. See codes on See codes on https://web.archive.org/web/20190531120557/https://www.nmea.org/Assets/20120726%20nmea%202000%20class%20&%20function%20codes%20v%202.00.pdf
                                 30, // Device class=Inter/Intranetwork Device. See codes on  https://web.archive.org/web/20190531120557/https://www.nmea.org/Assets/20120726%20nmea%202000%20class%20&%20function%20codes%20v%202.00.pdf
-                                2046 // Just choosen free from code list on http://www.nmea.org/Assets/20121020%20nmea%202000%20registration%20list.pdf
+                                717 // Just choosen free from code list on http://www.nmea.org/Assets/20121020%20nmea%202000%20registration%20list.pdf
                                );
 
 // If you also want to see all traffic on the bus use N2km_ListenAndNode instead of N2km_NodeOnly below
