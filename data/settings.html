@@ -16,8 +16,6 @@
     %CONFIGPLACEHOLDER%
     <script>
         function formToJson(form) {
-            var xhr = new XMLHttpRequest();
-            alert("formToJson wird aufgerufen!");
             var jsonFormInfo = JSON.stringify
             ({
             wAP_SSID: form.SSID.value,
@@ -28,11 +26,21 @@
             wRelay3Name: form.Relay3Name.value
             });
 
-            xhr.open("POST", "/settings.html", true);
-            xhr.setRequestHeader("Content-Type", "application/json");
-            xhr.send(jsonFormInfo);
-            window.alert("Gespeichert!");
-        }
+           var xhr = new XMLHttpRequest();
+        xhr.open("POST", "/settings.html", true);
+        xhr.setRequestHeader("Content-Type", "application/json");
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === 4) {
+                if (xhr.status === 200) {
+                    alert("Gespeichert!");
+                } else {
+                    alert("Fehler beim Speichern!");
+                }
+            }
+        };
+        xhr.send(jsonFormInfo);
+        return false; // Verhindert das Neuladen der Seite
+    }
     </script>
 
     <p class="label">Nach &Auml;nderungen neu starten!</p>

@@ -197,6 +197,7 @@ bool writeConfig(String json)
     Serial.println("Konfiguration geschrieben...");
 
     // Kontrolle
+    Serial.println("Konfiguration geschrieben...");
     serializeJsonPretty(testDocument, Serial);
 
     configFile.close();

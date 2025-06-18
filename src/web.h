@@ -128,19 +128,27 @@ void initWebsite() {
     server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest *request) {
         request->send(LittleFS, "/style.css", "text/css");
     });
-    server.on("/settings.html", HTTP_POST, [](AsyncWebServerRequest *request)
-    {
-       // Body wird asynchron empfangen!
-        }, NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-        String json = "";
-    for (size_t i = 0; i < len; i++) {
-        json += (char)data[i];
-    }
+    server.on("/settings.html", HTTP_POST, [](AsyncWebServerRequest *request){
+       // Wird nicht genutzt, da Body-Handler verwendet wird
+        }, 
+        NULL, 
+        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+        static String json = "";
+        if (index == 0) json = ""; // Nur beim ersten Chunk leeren
+        for (size_t i = 0; i < len; i++) {
+            json += (char)data[i];
+        }
+        if (index + len == total) { // Letzter Chunk
             Serial.println("Empfangenes JSON (Body):");
             Serial.println(json);
-            writeConfig(json);
-        request->send(200, "text/plain", "Daten gespeichert");
-    });
+            if (writeConfig(json)) {
+                request->send(200, "text/plain", "Daten gespeichert");
+            } else {
+                request->send(500, "text/plain", "Fehler beim Speichern!");
+            }
+        }
+    }
+);
   
 // Send a GET request to <ESP_IP>/update?relay=<inputMessage>&state=<inputMessage2>
     server.on("/update", HTTP_GET, [] (AsyncWebServerRequest *request) {
