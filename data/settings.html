@@ -26,20 +26,20 @@
             wRelay3Name: form.Relay3Name.value
             });
 
-           var xhr = new XMLHttpRequest();
-        xhr.open("POST", "/settings.html", true);
-        xhr.setRequestHeader("Content-Type", "application/json");
-        xhr.onreadystatechange = function() {
-            if (xhr.readyState === 4) {
-                if (xhr.status === 200) {
-                    alert("Gespeichert!");
-                } else {
-                    alert("Fehler beim Speichern!");
+            var xhr = new XMLHttpRequest();
+            xhr.open("POST", "/settings.html", true);
+            xhr.setRequestHeader("Content-Type", "application/json");
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4) {
+                    if (xhr.status === 200) {
+                        alert("Gespeichert!");
+                    } else {
+                        alert("Fehler beim Speichern!");
+                    }
                 }
-            }
-        };
-        xhr.send(jsonFormInfo);
-        return false; // Verhindert das Neuladen der Seite
+            };
+            xhr.send(jsonFormInfo);
+            return false; // Verhindert das Neuladen der Seite
     }
     </script>
 
