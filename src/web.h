@@ -42,13 +42,13 @@ String processor(const String& var)
         buttons += "<p class=\"CInput\"><label>Password </label><input type = \"text\" name = \"Password\" value=\"";
         buttons += tAP_Config.wAP_Password;
         buttons += "\"/></p>";
-        buttons += "<p class=\"CInput\"><label>Relais 1 Name </label><input type = \"text\" name = \"sRelay1Name\" value=\"";
+        buttons += "<p class=\"CInput\"><label>Relais 1 Name </label><input type = \"text\" name = \"Relay1Name\" value=\"";
         buttons += tAP_Config.wRelay1Name;
         buttons += "\"/> </p>";
-        buttons += "<p class=\"CInput\"><label>Relais 2 Name </label><input type = \"text\" name = \"sRelay2Name\" value=\"";
+        buttons += "<p class=\"CInput\"><label>Relais 2 Name </label><input type = \"text\" name = \"Relay2Name\" value=\"";
         buttons += tAP_Config.wRelay2Name;
         buttons += "\"/> </p>";
-        buttons += "<p class=\"CInput\"><label>Relais 3 Name </label><input type = \"text\" name = \"sRelay3Name\" value=\"";
+        buttons += "<p class=\"CInput\"><label>Relais 3 Name </label><input type = \"text\" name = \"Relay3Name\" value=\"";
         buttons += tAP_Config.wRelay3Name;
         buttons += "\"/> </p>";
         buttons += "<p class=\"button\"><input type=\"submit\" value=\"Speichern\"></p>";
