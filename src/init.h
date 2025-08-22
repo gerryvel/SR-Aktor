@@ -18,7 +18,7 @@
 // Init USB serial port
 void initSerial() {
   Serial.begin(115200);
-  Serial.printf("Binary Switch setup %s start\n", Version);
+  Serial.printf("BinarySwitch setup %s start\n", VersionSoftware);
 }
 
   /**
@@ -91,8 +91,8 @@ void initNMEA2000() {
   NMEA2000.SetProductInformation("BA01.2504", // Manufacturer's Model serial code
                                  100, // Manufacturer's product code
                                  "Binary Actor Module",  // Manufacturer's Model ID
-                                 "0.9.0.0 (2025-04-20)",  // Manufacturer's Software version code
-                                 "1.0.0.0 (2024-04-20)" // Manufacturer's Model version
+                                 VersionSoftware,  // Manufacturer's Software version code
+                                 VersionHardware // Manufacturer's Model version
                                 );
 // Set device information
   NMEA2000.SetDeviceInformation(id, // Unique number. Use e.g. Serial number.
