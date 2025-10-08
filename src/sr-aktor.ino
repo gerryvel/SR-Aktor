@@ -44,6 +44,7 @@
 void setup() {
 
   initSerial();
+  delay(2000);
   initLittleFS();
 
 	/**
@@ -63,7 +64,7 @@ void setup() {
   LEDInit();
   initRelays();
 
-  // Boardinfo	
+  // Boardinfo	11
   /**
    * @brief 
    * Read Boardinfo for output 
@@ -76,7 +77,7 @@ void setup() {
   if(WiFi.softAP(AP_SSID, AP_PASSWORD, channel, hide_SSID, max_connection)){
     WiFi.softAPConfig(IP, Gateway, NMask);
     Serial.println("\nAccesspoint " + String(AP_SSID) + " running");
-    Serial.println("\nSet IP " + IP.toString() + " ,Gateway: " + Gateway.toString() + " ,NetMask: " + NMask.toString() + " ready");
+    Serial.println("\nSet IP " + IP.toString() + ", Gateway: " + Gateway.toString() + ", NetMask: " + NMask.toString() + " ready");
     LEDon(LED(Green));
     delay(1000);
     LEDoff(LED(Green));
@@ -182,9 +183,9 @@ void SendN2kSwitchBankStatus(bool Status1, bool Status2, bool Status3) {
 {
   tN2kBinaryStatus BankStatus;
   N2kResetBinaryStatus(BankStatus);
-  N2kSetStatusBinaryOnStatus(BankStatus, Status1 ? N2kOnOff_On : N2kOnOff_Off, 0);
-  N2kSetStatusBinaryOnStatus(BankStatus, Status2 ? N2kOnOff_On : N2kOnOff_Off, 1);
-  N2kSetStatusBinaryOnStatus(BankStatus, Status3 ? N2kOnOff_On : N2kOnOff_Off, 2);
+  N2kSetStatusBinaryOnStatus(BankStatus, Status1 ? N2kOnOff_On : N2kOnOff_Off, 1);
+  N2kSetStatusBinaryOnStatus(BankStatus, Status2 ? N2kOnOff_On : N2kOnOff_Off, 2);
+  N2kSetStatusBinaryOnStatus(BankStatus, Status3 ? N2kOnOff_On : N2kOnOff_Off, 3);
   SetN2kPGN127501(N2kMsg, 0, BankStatus);
 }
   }
@@ -192,20 +193,53 @@ void SendN2kSwitchBankStatus(bool Status1, bool Status2, bool Status3) {
   }
 
 
-/************************************ Loop ***********************************/
-void loop() {
+void SetN2kPGN12620(tN2kMsg &N2kMsg, unsigned char DeviceBankInstance, tN2kBinaryStatus BankStatus) {
+    N2kMsg.SetPGN(126208L);
+    N2kMsg.Priority=3;
+	BankStatus = (BankStatus << 8) | DeviceBankInstance;
+	N2kMsg.AddUInt64(BankStatus);
+}  
 
-  SendN2kSwitchBankStatus(Rel1Status, Rel2Status, Rel3Status);
+//*****************************************************************************
+inline void SetN2kSwitchBankCommand(tN2kMsg &N2kMsg, unsigned char DeviceBankInstance, tN2kBinaryStatus BankStatus) {
+  SetN2kPGN127502(N2kMsg,DeviceBankInstance,BankStatus);
+}
 
-  NMEA2000.ParseMessages();
+//*****************************************************************************
+void SetSwitch(unsigned char DeviceBankInstance, uint8_t SwitchIndex, bool ItemStatus) {
+  tN2kBinaryStatus BankStatus;
+  tN2kMsg N2kMsg;
+
+  N2kResetBinaryStatus(BankStatus);
+  N2kSetStatusBinaryOnStatus(BankStatus,ItemStatus?N2kOnOff_On:N2kOnOff_Off,SwitchIndex);
+  SetN2kSwitchBankCommand(N2kMsg,DeviceBankInstance,BankStatus);
+  NMEA2000.SendMsg(N2kMsg);
+}
+
+
+  
+void CheckSourceAddressChange() {
   int SourceAddress = NMEA2000.GetN2kSource();
-  if (SourceAddress != NodeAddress) { // Save potentially changed Source Address to NVS memory
+
+  if (SourceAddress != NodeAddress) { // Save potentially changed Source Address to NVS memory 
     NodeAddress = SourceAddress;      // Set new Node Address (to save only once)
     preferences.begin("nvs", false);
     preferences.putInt("LastNodeAddress", SourceAddress);
     preferences.end();
     Serial.printf("Address Change: New Address=%d\n", SourceAddress);
   }
+}
+/************************************ Loop ***********************************/
+void loop() {
+
+  SendN2kSwitchBankStatus(Rel1Status, Rel2Status, Rel3Status);
+
+  SetSwitch(0, 1, Rel1Status);
+  SetSwitch(0, 2, Rel2Status);
+  SetSwitch(0, 3, Rel3Status);
+
+  NMEA2000.ParseMessages();
+  CheckSourceAddressChange();
 
   // Dummy to empty input buffer to avoid board to stuck with e.g. NMEA Reader
   if ( Serial.available() ) {

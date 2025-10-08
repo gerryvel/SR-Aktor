@@ -88,9 +88,9 @@ void initNMEA2000() {
                                                    };
 
 
-  NMEA2000.SetProductInformation("BA01.2504", // Manufacturer's Model serial code
+  NMEA2000.SetProductInformation("00260001", // Manufacturer's Model serial code
                                  100, // Manufacturer's product code
-                                 "Binary Actor Module",  // Manufacturer's Model ID
+                                 "YDCC-04",  // Manufacturer's Model ID
                                  VersionSoftware,  // Manufacturer's Software version code
                                  VersionHardware // Manufacturer's Model version
                                 );
