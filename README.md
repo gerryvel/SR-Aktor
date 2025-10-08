@@ -45,3 +45,8 @@ I use an B&G Vulcan 7 with Czone Support, after import the file:
 ![vulcan_v7_control](https://github.com/user-attachments/assets/014ecccb-5900-4c55-aafc-dfafc79efb1c)
 
 Configure Czone file from the [Yacht Device Website](https://www.yachtd.com/products/ds/?czone)
+
+## Changes
+
+- Todo: Function with MFD Control
+- Version 1.0 Function with Website control, Monitor on NMEA200 okay (PGN127501)
