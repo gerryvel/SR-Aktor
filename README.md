@@ -23,7 +23,8 @@ This project is part of [OpenBoatProject](https://open-boat-projects.org/)
 
 ## Wiring diagram
 
-![grafik](https://github.com/user-attachments/assets/a76ab02f-7445-425b-8801-30d6ab660022)
+<img width="3507" height="2480" alt="grafik" src="https://github.com/user-attachments/assets/e5de91e6-09d3-4055-8688-13e79fd537ea" />
+
 
 ## PCB Layout
 PCB by Aisler: [Link](https://aisler.net/p/OFGLZJKF)
