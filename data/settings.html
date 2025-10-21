@@ -23,7 +23,9 @@
             wAP_Password: form.Password.value,
             wRelay1Name: form.Relay1Name.value,
             wRelay2Name: form.Relay2Name.value,
-            wRelay3Name: form.Relay3Name.value
+            wRelay3Name: form.Relay3Name.value,
+            n2kDebug: form.n2kDebug.checked
+            ,acceptBroadcastCommands: form.acceptBroadcastCommands ? form.acceptBroadcastCommands.checked : false
             });
 
             var xhr = new XMLHttpRequest();
@@ -31,10 +33,13 @@
             xhr.setRequestHeader("Content-Type", "application/json");
             xhr.onreadystatechange = function() {
                 if (xhr.readyState === 4) {
+                    var statusEl = document.getElementById('status');
                     if (xhr.status === 200) {
-                        alert("Gespeichert!");
+                        statusEl.style.color = 'green';
+                        statusEl.innerText = 'Gespeichert!';
                     } else {
-                        alert("Fehler beim Speichern!");
+                        statusEl.style.color = 'red';
+                        statusEl.innerText = 'Fehler beim Speichern!';
                     }
                 }
             };
