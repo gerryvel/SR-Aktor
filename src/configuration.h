@@ -7,44 +7,40 @@
  * @brief Konfiguration für GPIO und Variable
  * @version 2.3
  * @date 2025-01-06
- * 
- * @copyright Copyright (c) 2025
- * 
  */
 
+// Core Arduino includes (provides String, IPAddress, uint8_t, etc.)
 #include <Arduino.h>
 #include <Preferences.h>
 
 // Versionierung
-#define VersionSoftware "1.0.1.0 (2025-10-08)"  // Version Software
-#define VersionHardware "1.1.0.0 (2025-08-07)"  // Version HArdware
+#define VersionSoftware "1.0.1.0 (2025-10-11)"  // Version Software
+#define VersionHardware "1.1.0.0 (2025-08-07)"  // Version Hardware
 
 /**
  * @brief Config NMEA2000
- * 
  */
 #define ESP32_CAN_TX_PIN GPIO_NUM_4  // Set CAN TX port to 4 
 #define ESP32_CAN_RX_PIN GPIO_NUM_5  // Set CAN RX port to 5
 #define N2K_SOURCE 15
-int NodeAddress;                     // To store Last Node Address
-Preferences preferences;             // Nonvolatile storage on ESP32 - To store LastDeviceAddress
-uint8_t chipid[6];
-uint32_t id = 0;
-int i = 0;
+
+// General timing / offsets
 #define SwitchControlSendOffset 0
 #define SwitchStatusSendOffset 40
 #define RPMSendOffset 80
 #define BatteryDCSendOffset 120
 #define BatteryDCStatusSendOffset 160
 #define SlowDataUpdatePeriod 1000  // Time between CAN Messages sent
+// NMEA2000 item index for the third relay on PGN127501/127502.
+// Set to 3 for standard mapping, set to 5 for MFD profiles expecting 0.5.
+#define N2K_THIRD_SWITCH_ITEM 3
 
-
-//Configuration Website
+// Configuration Website
 #define PAGE_REFRESH 10 // x Sec.
-#define WEB_TITEL "Binary Actor Module"
-String sHeapspace = "";
+#define WEB_TITEL "SR03 Module"
+extern String sHeapspace;
 
-//Configuration mit Webinterface
+// Configuration mit Webinterface
 struct Web_Config
 {
 	char wAP_IP[20];
@@ -55,113 +51,182 @@ struct Web_Config
 	char wRelay3Name[12];
 	char wADC2_Cal[6];
 };
-Web_Config tAP_Config;
+extern Web_Config tAP_Config;
 
-//Configuration AP 
-#define HostName        "BinarySwitch"			// Hostname for AP
-const int   channel        = 10;                // WiFi Channel number between 1 and 13
-const bool  hide_SSID      = false;             // To disable SSID broadcast -> SSID will not appear in a basic WiFi scan
-const int   max_connection = 2;                 // Maximum simultaneous connected clients on the AP
+// Configuration AP
+#define HostName "BinarySwitch"
+#define CHANNEL_DEFAULT 10
+#define HIDE_SSID_DEFAULT false
+#define MAX_CONNECTIONS_DEFAULT 2
 
 // Variables for WIFI-AP
-IPAddress IP = IPAddress(192, 168, 15, 25);
-IPAddress Gateway = IPAddress(192, 168, 15, 25);
-IPAddress NMask = IPAddress(255, 255, 255, 0);
-const char* AP_SSID = "BinarySwitch";
-const char* AP_PASSWORD  = "12345678";
-IPAddress AP_IP;
-IPAddress CL_IP;
-IPAddress SELF_IP;
-String sAP_Station = "";
+extern IPAddress IP;
+extern IPAddress Gateway;
+extern IPAddress NMask;
+extern const char* AP_SSID;
+extern const char* AP_PASSWORD;
+extern IPAddress AP_IP;
+extern IPAddress CL_IP;
+extern IPAddress SELF_IP;
+extern String sAP_Station;
 
-//Configuration Client (Network Data Windsensor)
-#define CL_SSID      "NoWa"					//Windmesser
-#define CL_PASSWORD  "12345678"		
-int iSTA_on = 0;                            // Status STA-Mode
-int bConnect_CL = 0;
-bool bClientConnected = 0;
+// Node address and persistent preferences
+extern int NodeAddress;
+extern Preferences preferences;
+
+// AP runtime settings (provide variables for legacy code using 'channel', 'hide_SSID', 'max_connection')
+extern int channel;
+extern bool hide_SSID;
+extern int max_connection;
+
+// --- Definitions for internal helper types used by N2k debugging and mappings ---
+// Keep these lightweight so they can be used from multiple compilation units.
+#ifndef N2KRAW_MAX
+#define N2KRAW_MAX 16
+#endif
+
+#ifndef MAX_PROP_MAPPINGS
+#define MAX_PROP_MAPPINGS 32
+#endif
+
+#ifndef MAX_DETECTED_EVENTS
+#define MAX_DETECTED_EVENTS 32
+#endif
+
+// Raw N2k message entry used for web debug buffer
+struct N2kRawEntry {
+	uint32_t pgn;
+	uint8_t src;
+	uint8_t dst;
+	uint8_t len;
+	uint8_t data[8];
+};
+
+// Simple mapping definition: pgn, byte offset, expected value, relay index (1..), action
+struct ProprietaryMapping {
+	uint32_t pgn;
+	uint8_t offset;
+	uint8_t value;
+	uint8_t relay;
+	uint8_t action;
+};
+
+// Detected event cached for edge-detection
+struct DetectedEvent {
+	uint32_t pgn;
+	unsigned long lastSeen;
+	uint8_t count;
+	uint8_t len;
+	uint8_t data[32];
+};
+
+// Configuration Client (Network Data Windsensor)
+#define CL_SSID "NoWa"
+#define CL_PASSWORD "12345678"
+extern int iSTA_on;
+extern int bConnect_CL;
+extern bool bClientConnected;
 
 // Calibration data variable definition for ADC1 and ADC2 Input
-double ADC_Calibration_Value1 = 170.0; /**< For resistor measure 5 Volt and 180 Ohm equals 100% plus 1K resistor. Old Value 250.0 */
-double ADC_Calibration_Value2 = 19.0;  /**< The real value depends on the true resistor values for the ADC input (100K / 27 K). Old value 34.3 */
+extern double ADC_Calibration_Value1;
+extern double ADC_Calibration_Value2;
 
-//Confuration Sensors I2C
-#define I2C_SDA 21                      //Standard 21
-#define I2C_SCL 22                      //Standard 22
-#define SEALEVELPRESSURE_HPA (1013.25)  //1013.25
-float fbmp_temperature = 0;
-float fbmp_pressure = 0;
-float fbmp_altitude = 0;
-String sI2C_Status = "";
-bool bI2C_Status = 0;
+// Configuration Sensors I2C
+#define I2C_SDA 21
+#define I2C_SCL 22
+#define SEALEVELPRESSURE_HPA (1013.25)
+extern float fbmp_temperature;
+extern float fbmp_pressure;
+extern float fbmp_altitude;
+extern String sI2C_Status;
+extern bool bI2C_Status;
 
 // Global Data Sonar
-const int iMaxSonar = 35;			//Analoginput 
-int iDistance = 0;
+const int iMaxSonar = 35;
+extern int iDistance;
 
-// Global Data Motordata Sensor
-float FuelLevel = 0;
-float FuelLevelMax = 30;
-float CoolantTemp = 0;
-float MotorTemp = 0;
-float EngineRPM = 0;
-float BordSpannung = 0;
-bool EngineOn = false;
-String motorErrorReported = "Aus";
-String coolantErrorReported = "Aus";
-static unsigned long Counter;			// Enginehours
-enum EngineStatus { Off = 0,  On = 1, };
-#define RPM_Calibration_Value 4.0 // Translates Generator RPM to Engine RPM 
-#define Eingine_RPM_Pin 19  // Engine RPM is measured as interrupt on GPIO 23
+// Global Data Motor data
+extern float FuelLevel;
+extern float FuelLevelMax;
+extern float CoolantTemp;
+extern float MotorTemp;
+extern float EngineRPM;
+extern float BordSpannung;
+extern bool EngineOn;
+extern String motorErrorReported;
+extern String coolantErrorReported;
+extern unsigned long Counter;
+enum EngineStatus { Off = 0, On = 1 };
+#define RPM_Calibration_Value 4.0
+#define Eingine_RPM_Pin 19
 
 // Global Data Battery
-int Bat1Capacity = 55; 	// Starterbatterie
-int Bat2Capacity = 90;	// Versorgerbatterie
-int SoCError = 0;
-float BatSoC = 0;
+extern int Bat1Capacity;
+extern int Bat2Capacity;
+extern int SoCError;
+extern float BatSoC;
 
-// Data wire for teperature (Dallas DS18B20) 
-#define ONE_WIRE_BUS 14			// Data wire for teperature (Dallas DS18B20) is plugged into GPIO 13
-String sOneWire_Status = "";
+// Data wire for temperature (Dallas DS18B20)
+#define ONE_WIRE_BUS 14
+extern String sOneWire_Status;
 
 // Variables Website
-float fDrehzahl = 0;
-float fGaugeDrehzahl = 0;
-float fBordSpannung = 0;
-float fCoolantTemp = 0;
-float fMotorTemp = 0;
-float fCoolantOffset = 0;
-float fMotorOffset = 0;
-String sSTBB = "";
-String sOrient = "";
+extern float fDrehzahl;
+extern float fGaugeDrehzahl;
+extern float fBordSpannung;
+extern float fCoolantTemp;
+extern float fMotorTemp;
+extern float fCoolantOffset;
+extern float fMotorOffset;
+extern String sSTBB;
+extern String sOrient;
 
-//Definiton NMEA0183 MWV
-double dMWV_WindDirectionT = 0;
-double dMWV_WindSpeedM = 0;
-double dVWR_WindDirectionM = 0;
-double dVWR_WindAngle = 0;
-double dVWR_WindSpeedkn = 0;
-double dVWR_WindSpeedms = 0;
+// Definition NMEA0183 MWV
+extern double dMWV_WindDirectionT;
+extern double dMWV_WindSpeedM;
+extern double dVWR_WindDirectionM;
+extern double dVWR_WindAngle;
+extern double dVWR_WindSpeedkn;
+extern double dVWR_WindSpeedms;
 
-//Configuration NMEA0183
-#define SERVER_HOST_NAME "192.168.30.15"		//"192.168.76.34"
-#define TCP_PORT 6666						//6666
-#define DNS_PORT 53
-
-//Variable NMEA 0183 Stream
-const char *udpAddress = "192.168.30.255"; // Set network address for broadcast
-const int udpPort = 4444;                 // UDP port
+// Variable NMEA 0183 Stream
+extern const char *udpAddress;
+extern const int udpPort;
 
 // SR-Board
-#define NUM_RELAYS  3		// Number of Relais
-#define RELAY_NO    1	// Relais NormallyOpen
-int Relais[NUM_RELAYS] = {25, 26, 27};
-int SwitchSet = 0;
-bool Rel1Status = 0;
-bool Rel2Status = 0;
-bool Rel3Status = 0;
-String sRelay1Name = "";
-String sRelay2Name = "";
-String sRelay3Name = "";
+#define NUM_RELAYS 3
+#define RELAY_NO 1
+extern int Relais[NUM_RELAYS];
+extern int SwitchSet;
+extern bool Rel1Status;
+extern bool Rel2Status;
+extern bool Rel3Status;
+// Per-relay flags: allow MFD control for each relay (default true)
+extern bool RelayAllowMFD[NUM_RELAYS];
+extern String sRelay1Name;
+extern String sRelay2Name;
+extern String sRelay3Name;
 
-#endif  
+// NMEA2000 / debug globals
+extern bool N2kDebug;
+extern bool InvertN2kStatus;
+extern bool AcceptBroadcastCommands;
+extern unsigned long LastReceivedN2kPGN;
+extern String LastReceivedN2kText;
+
+// Boot protection timer (ms) - set during setup to block mappings until baseline seeded
+extern unsigned long BootBlockUntil;
+
+// N2k raw buffer and mappings - ensure types N2kRawEntry, ProprietaryMapping, DetectedEvent
+// are defined before including this header
+extern N2kRawEntry N2kRawBuf[];
+extern uint8_t N2kRawHead;
+
+extern ProprietaryMapping PropMappings[];
+extern uint8_t PropMappingCount;
+
+extern DetectedEvent DetectedEvents[];
+extern uint8_t DetectedEventCount;
+
+
+#endif // __configuration__H__

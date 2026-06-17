@@ -34,6 +34,7 @@
 #include <ESPmDNS.h>
 #include <arpa/inet.h>
 #include "BoardInfo.h"
+#include "czone.h"
 #include "helper.h"
 #include "web.h"
 #include "LEDindicator.h"
@@ -41,6 +42,112 @@
 
 
 /******************************************* Setup *******************************************************/
+
+// Circular buffer for raw N2k messages (store small history)
+N2kRawEntry N2kRawBuf[N2KRAW_MAX];
+uint8_t N2kRawHead = 0;
+// Proprietary mapping storage (in RAM, persisted via writeConfig when changed)
+ProprietaryMapping PropMappings[MAX_PROP_MAPPINGS];
+uint8_t PropMappingCount = 0;
+
+DetectedEvent DetectedEvents[MAX_DETECTED_EVENTS];
+uint8_t DetectedEventCount = 0;
+
+// Push an incoming raw N2k message into the circular buffer for web debug
+void PushRawN2k(const tN2kMsg &msg) {
+  N2kRawHead = (N2kRawHead + 1) % N2KRAW_MAX;
+  N2kRawEntry &e = N2kRawBuf[N2kRawHead];
+  e.pgn = msg.PGN;
+  e.src = msg.Source;
+  e.dst = msg.Destination;
+  e.len = msg.DataLen;
+  for (uint8_t i = 0; i < 8; i++) e.data[i] = (i < e.len) ? msg.Data[i] : 0xFF;
+}
+
+// Handler for incoming NMEA2000 messages. Registered in setup().
+void HandleNMEA2000Msg(const tN2kMsg &N2kMsg) {
+  if (N2kDebug) {
+    Serial.print("Received PGN: "); Serial.println(N2kMsg.PGN);
+    N2kMsg.Print(&Serial);
+  }
+  // Push raw message into ring buffer for web debug and save last received PGN for web inspection
+  PushRawN2k(N2kMsg);
+  LastReceivedN2kPGN = N2kMsg.PGN;
+  LastReceivedN2kText = String("PGN:") + String(N2kMsg.PGN) + String(" Src:") + String(N2kMsg.Source) + String(" Dst:") + String(N2kMsg.Destination);
+
+  if (CZone_HandleMsg(N2kMsg)) {
+    return;
+  }
+
+  // Direct Switch Bank Control (PGN 127502)
+  if (N2kMsg.PGN == 127502L) {
+    unsigned char TargetBankInstance = 0;
+    tN2kBinaryStatus BankStatus = 0;
+    if (ParseN2kPGN127502(N2kMsg, TargetBankInstance, BankStatus)) {
+    // Accept both instance 0 and 1 for compatibility with different MFD mappings.
+    // or accept if broadcast and AcceptBroadcastCommands is enabled
+  // Some devices use Destination==255 for global broadcast - accept both 0 and 255
+  bool isBroadcast = (N2kMsg.Destination == 0 || N2kMsg.Destination == 255);
+  if (TargetBankInstance == 0 || TargetBankInstance == 1 || (isBroadcast && AcceptBroadcastCommands)) {
+        tN2kOnOff s1 = N2kGetStatusOnBinaryStatus(BankStatus, 1);
+        tN2kOnOff s2 = N2kGetStatusOnBinaryStatus(BankStatus, 2);
+      tN2kOnOff s3 = N2kGetStatusOnBinaryStatus(BankStatus, N2K_THIRD_SWITCH_ITEM);
+
+        bool on1 = (s1 == N2kOnOff_On);
+        bool on2 = (s2 == N2kOnOff_On);
+      bool on3 = (s3 == N2kOnOff_On);
+
+        digitalWrite(Relais[0], on1 ? HIGH : LOW);
+        digitalWrite(Relais[1], on2 ? HIGH : LOW);
+        digitalWrite(Relais[2], on3 ? HIGH : LOW);
+        // Update status vars and send an immediate status report
+        Rel1Status = GetRelayLogicalState(0);
+        Rel2Status = GetRelayLogicalState(1);
+        Rel3Status = GetRelayLogicalState(2);
+        SendN2kSwitchBankStatus(Rel1Status, Rel2Status, Rel3Status);
+      }
+    }
+    return;
+  }
+
+  // Group Function (PGN 126208) - handle Command for PGN 127502
+  if (N2kMsg.PGN == 126208L) {
+    tN2kGroupFunctionCode gf;
+    unsigned long PGNForGroupFunction;
+    if (tN2kGroupFunctionHandler::Parse(N2kMsg, gf, PGNForGroupFunction)) {
+      if (PGNForGroupFunction == 127502L && gf == N2kgfc_Command) {
+        uint8_t PrioritySetting = 0;
+        uint8_t NumberOfParameterPairs = 0;
+        if (tN2kGroupFunctionHandler::ParseCommandParams(N2kMsg, PrioritySetting, NumberOfParameterPairs)) {
+          int Index = 0;
+          if (tN2kGroupFunctionHandler::StartParseCommandPairParameters(N2kMsg, Index)) {
+            // Allow broadcast commands when enabled - some send Dst==0, others Dst==255
+            bool isBroadcast = (N2kMsg.Destination == 0 || N2kMsg.Destination == 255);
+            if (N2kMsg.Destination != NodeAddress && !(isBroadcast && AcceptBroadcastCommands)) {
+              // Not for us
+              return;
+            }
+            for (uint8_t p = 0; p < NumberOfParameterPairs; p++) {
+              uint8_t FieldNo = N2kMsg.GetByte(Index);
+              uint8_t FieldValue = N2kMsg.GetByte(Index);
+              if (FieldNo >= 1 && FieldNo <= 3) {
+                bool on = (FieldValue != 0);
+                digitalWrite(Relais[FieldNo - 1], on ? HIGH : LOW);
+              }
+            }
+            // Update status vars and send an immediate status report
+            Rel1Status = digitalRead(Relais[0]);
+            Rel2Status = digitalRead(Relais[1]);
+            Rel3Status = digitalRead(Relais[2]);
+            SendN2kSwitchBankStatus(Rel1Status, Rel2Status, Rel3Status);
+          }
+        }
+      }
+    }
+    return;
+  }
+}
+
 void setup() {
 
   initSerial();
@@ -115,6 +222,10 @@ void setup() {
   
 // Init NMEA2000
   initNMEA2000();
+  CZone_Init();
+
+  // Register incoming NMEA2000 message handler so we can react to remote commands
+  NMEA2000.SetMsgHandler(HandleNMEA2000Msg);
 
 /**
  * @brief OTA
@@ -172,28 +283,42 @@ void SetNextUpdate(unsigned long &NextUpdate, unsigned long Period) {
 void SendN2kSwitchBankStatus(bool Status1, bool Status2, bool Status3) {
   static unsigned long SlowDataUpdated = InitNextUpdate(SlowDataUpdatePeriod, SwitchStatusSendOffset);
   tN2kMsg N2kMsg;
+  tN2kBinaryStatus bankStatus;
 
   if ( IsTimeToUpdate(SlowDataUpdated) ) {
     SetNextUpdate(SlowDataUpdated, SlowDataUpdatePeriod);
+    N2kResetBinaryStatus(bankStatus);
 
+    // Read actual logical relay states at send time to avoid stale values
+    Status1 = GetRelayLogicalState(0);
+    Status2 = GetRelayLogicalState(1);
+    Status3 = GetRelayLogicalState(2);
     Serial.printf("R1 Status     : %s \n", Status1 ? "On" : "Off");
     Serial.printf("R2 Status     : %s \n", Status2 ? "On" : "Off");
     Serial.printf("R3 Status     : %s \n", Status3 ? "On" : "Off");
 
-{
-  tN2kBinaryStatus BankStatus;
-  N2kResetBinaryStatus(BankStatus);
-  N2kSetStatusBinaryOnStatus(BankStatus, Status1 ? N2kOnOff_On : N2kOnOff_Off, 1);
-  N2kSetStatusBinaryOnStatus(BankStatus, Status2 ? N2kOnOff_On : N2kOnOff_Off, 2);
-  N2kSetStatusBinaryOnStatus(BankStatus, Status3 ? N2kOnOff_On : N2kOnOff_Off, 3);
-  SetN2kPGN127501(N2kMsg, 0, BankStatus);
+    const bool report1 = InvertN2kStatus ? !Status1 : Status1;
+    const bool report2 = InvertN2kStatus ? !Status2 : Status2;
+    const bool report3 = InvertN2kStatus ? !Status3 : Status3;
+
+    // Build full bank status and place relay 3 on configured item index.
+    N2kSetStatusBinaryOnStatus(bankStatus, report1 ? N2kOnOff_On : N2kOnOff_Off, 1);
+    N2kSetStatusBinaryOnStatus(bankStatus, report2 ? N2kOnOff_On : N2kOnOff_Off, 2);
+    N2kSetStatusBinaryOnStatus(bankStatus, report3 ? N2kOnOff_On : N2kOnOff_Off, N2K_THIRD_SWITCH_ITEM);
+    SetN2kPGN127501(N2kMsg, 0, bankStatus);
+
+        // Diagnostic: print message bytes only when N2kDebug is enabled.
+    if (N2kDebug) {
+      N2kMsg.Print(&Serial);
+    }
+
+    // Send only when we updated the message
+    NMEA2000.SendMsg(N2kMsg);
+  }
 }
-  }
-     NMEA2000.SendMsg(N2kMsg);
-  }
 
 
-void SetN2kPGN12620(tN2kMsg &N2kMsg, unsigned char DeviceBankInstance, tN2kBinaryStatus BankStatus) {
+void SetN2kPGN126208(tN2kMsg &N2kMsg, unsigned char DeviceBankInstance, tN2kBinaryStatus BankStatus) {
     N2kMsg.SetPGN(126208L);
     N2kMsg.Priority=3;
 	BankStatus = (BankStatus << 8) | DeviceBankInstance;
@@ -216,7 +341,30 @@ void SetSwitch(unsigned char DeviceBankInstance, uint8_t SwitchIndex, bool ItemS
   NMEA2000.SendMsg(N2kMsg);
 }
 
+#define PRIORITY_DO_NOT_CHANGE    0x08
+#define RESERVED_4_BITS_SET_TO_1  0x0f
 
+void SetN2kGroupFunctionCommand126208(tN2kMsg &N2kMsg, unsigned char DestinationId,
+                     unsigned char FieldNoOfParam, unsigned char FieldValue) {
+    N2kMsg.SetPGN(126208L);
+    N2kMsg.Priority    = 3;
+    N2kMsg.Destination = DestinationId;
+    N2kMsg.AddByte(N2kgfc_Command);     // field 1
+    N2kMsg.Add3ByteInt(126208L);        // field 2 : Commanded PGN
+                                        // field 3 : Priority Setting
+                                        // field 4 : NMEA Reserved
+    N2kMsg.AddByte(PRIORITY_DO_NOT_CHANGE | RESERVED_4_BITS_SET_TO_1<<4);
+    N2kMsg.AddByte(1);                  // field 5 : Number of Pairs .. to follow
+    N2kMsg.AddByte(FieldNoOfParam);     // field 6 : Field No of commanded param
+    N2kMsg.AddByte(FieldValue);         // field 7 : Value of commanded param
+}
+
+void sendSwitchCommand(unsigned char DestinationId, unsigned char FieldNoOfParam, unsigned char FieldValue)
+{
+    tN2kMsg N2kMsg;
+    SetN2kGroupFunctionCommand126208(N2kMsg, DestinationId, FieldNoOfParam, FieldValue);
+    NMEA2000.SendMsg(N2kMsg);
+}
   
 void CheckSourceAddressChange() {
   int SourceAddress = NMEA2000.GetN2kSource();
@@ -231,14 +379,33 @@ void CheckSourceAddressChange() {
 }
 /************************************ Loop ***********************************/
 void loop() {
+  static unsigned long lastSwitchControlAnnounce = 0;
 
   SendN2kSwitchBankStatus(Rel1Status, Rel2Status, Rel3Status);
 
-  SetSwitch(0, 1, Rel1Status);
-  SetSwitch(0, 2, Rel2Status);
-  SetSwitch(0, 3, Rel3Status);
+  // Compatibility: periodically announce full switch control bank (PGN127502)
+  // so MFDs can build a full switch list reliably.
+  if (millis() - lastSwitchControlAnnounce >= 1000UL) {
+    tN2kBinaryStatus controlBankStatus;
+    tN2kMsg controlMsg;
+
+    lastSwitchControlAnnounce = millis();
+
+    Rel1Status = GetRelayLogicalState(0);
+    Rel2Status = GetRelayLogicalState(1);
+    Rel3Status = GetRelayLogicalState(2);
+
+    N2kResetBinaryStatus(controlBankStatus);
+    N2kSetStatusBinaryOnStatus(controlBankStatus, Rel1Status ? N2kOnOff_On : N2kOnOff_Off, 1);
+    N2kSetStatusBinaryOnStatus(controlBankStatus, Rel2Status ? N2kOnOff_On : N2kOnOff_Off, 2);
+    N2kSetStatusBinaryOnStatus(controlBankStatus, Rel3Status ? N2kOnOff_On : N2kOnOff_Off, N2K_THIRD_SWITCH_ITEM);
+
+    SetN2kSwitchBankCommand(controlMsg, 0, controlBankStatus);
+    NMEA2000.SendMsg(controlMsg);
+  }
 
   NMEA2000.ParseMessages();
+  CZone_Loop();
   CheckSourceAddressChange();
 
   // Dummy to empty input buffer to avoid board to stuck with e.g. NMEA Reader
@@ -259,9 +426,9 @@ void loop() {
     sAP_Station = WiFi.softAPgetStationNum();
     freeHeapSpace();
 
-    Rel1Status = digitalRead(Relais[0]);
-    Rel2Status = digitalRead(Relais[1]);
-    Rel3Status = digitalRead(Relais[2]);
+  Rel1Status = GetRelayLogicalState(0);
+  Rel2Status = GetRelayLogicalState(1);
+  Rel3Status = GetRelayLogicalState(2);
     
 /**
  * @brief Construct a new if object

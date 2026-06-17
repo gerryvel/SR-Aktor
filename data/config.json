@@ -1,7 +1,10 @@
-{   "wSSID": "BinarySwitch",
-    "wIP": "192.168.15.25",
-    "wPasswort": "12345678",
+{
+    "wAP_SSID": "BinarySwitch",
+    "wAP_IP": "192.168.15.25",
+    "wAP_Password": "12345678",
     "wRelay1Name": "Relay 1",
     "wRelay2Name": "Relay 2",
-    "wRelay3Name": "Relay 3"
+    "wRelay3Name": "Relay 3",
+    "n2kDebug": false,
+    "acceptBroadcastCommands": false
 }

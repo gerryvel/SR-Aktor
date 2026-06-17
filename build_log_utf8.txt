@@ -1,0 +1,79 @@
+﻿Processing featheresp32 (platform: espressif32 @ 6.9.0; board: featheresp32; framework: arduino)
+--------------------------------------------------------------------------------
+Verbose mode can be enabled via `-v, --verbose` option
+CONFIGURATION: https://docs.platformio.org/page/boards/espressif32/featheresp32.html
+PLATFORM: Espressif 32 (6.9.0) > Adafruit ESP32 Feather
+HARDWARE: ESP32 240MHz, 320KB RAM, 4MB Flash
+DEBUG: Current (cmsis-dap) External (cmsis-dap, esp-bridge, esp-prog, iot-bus-jtag, jlink, minimodule, olimex-arm-usb-ocd, olimex-arm-usb-ocd-h, olimex-arm-usb-tiny-h, olimex-jtag-tiny, tumpa)
+PACKAGES: 
+ - framework-arduinoespressif32 @ 3.20017.241212+sha.dcc1105b 
+ - tool-esptoolpy @ 1.40501.0 (4.5.1) 
+ - toolchain-xtensa-esp32 @ 8.4.0+2021r2-patch5
+Converting sr-aktor.ino
+LDF: Library Dependency Finder -> https://bit.ly/configure-pio-ldf
+LDF Modes: Finder ~ chain, Compatibility ~ soft
+Found 40 compatible libraries
+Scanning dependencies...
+Dependency Graph
+|-- ArduinoJson @ 7.4.3
+|-- NMEA2000_esp32 @ 1.0.3
+|-- NMEA0183 @ 1.10.1
+|-- ESPAsyncWebServer-esphome @ 3.4.0
+|-- NMEA2000-library @ 4.24.1
+|-- WebSockets @ 2.7.3
+|-- LittleFS @ 2.0.0
+|-- ArduinoOTA @ 2.0.0
+|-- ESPmDNS @ 2.0.0
+|-- Preferences @ 2.0.0
+|-- FS @ 2.0.0
+|-- WiFi @ 2.0.0
+|-- Wire @ 2.0.0
+Building in release mode
+Replace MKSPIFFSTOOL with mklittlefs.exe
+Compiling .pio\build\featheresp32\src\sr-aktor.ino.cpp.o
+platformio.exe : In file included from C:/Users/gerryadmin/Documents/SR 
+Aktor/src/sr-aktor.ino:39:
+In Zeile:1 Zeichen:1
++ & "C:\Users\gerryadmin\.platformio\penv\Scripts\platformio.exe" run - ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (In file include...r-aktor.ino:39: 
+   :String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+src/web.h: In lambda function:
+src/web.h:160:17: warning: 'template<unsigned int N> class 
+ArduinoJson::V743PB22::StaticJsonDocument' is deprecated: use JsonDocument 
+instead [-Wdeprecated-declarations]
+                 StaticJsonDocument<1024> doc;
+                 ^~~~~~~~~~~~~~~~~~
+In file included from 
+.pio/libdeps/featheresp32/ArduinoJson/src/ArduinoJson.hpp:65,
+                 from 
+.pio/libdeps/featheresp32/ArduinoJson/src/ArduinoJson.h:9,
+                 from src/helper.h:24,
+                 from C:/Users/gerryadmin/Documents/SR 
+Aktor/src/sr-aktor.ino:38:
+.pio/libdeps/featheresp32/ArduinoJson/src/ArduinoJson/compatibility.hpp:63:58: 
+note: declared here
+ class ARDUINOJSON_DEPRECATED("use JsonDocument instead") StaticJsonDocument
+                                                          ^~~~~~~~~~~~~~~~~~
+Linking .pio\build\featheresp32\firmware.elf
+c:/users/gerryadmin/.platformio/packages/toolchain-xtensa-esp32/bin/../lib/gcc/
+xtensa-esp32-elf/8.4.0/../../../../xtensa-esp32-elf/bin/ld.exe: .pio\build\feat
+heresp32\src\czone.cpp.o:(.literal._ZL36SetCZoneSwitchChangeRequest127502_CZhhb
+$constprop$4+0x4): undefined reference to `SetN2kSwitchBankCommand(tN2kMsg&, 
+unsigned char, unsigned long long)'
+c:/users/gerryadmin/.platformio/packages/toolchain-xtensa-esp32/bin/../lib/gcc/
+xtensa-esp32-elf/8.4.0/../../../../xtensa-esp32-elf/bin/ld.exe: .pio\build\feat
+heresp32\src\czone.cpp.o:(.literal._ZL23SetChangeSwitchState_CZhb+0x8): 
+undefined reference to `BootBlockUntil'
+c:/users/gerryadmin/.platformio/packages/toolchain-xtensa-esp32/bin/../lib/gcc/
+xtensa-esp32-elf/8.4.0/../../../../xtensa-esp32-elf/bin/ld.exe: 
+.pio\build\featheresp32\src\czone.cpp.o: in function 
+`_ZL36SetCZoneSwitchChangeRequest127502_CZhhb$constprop$4':
+C:\Users\gerryadmin\Documents\SR Aktor/src/czone.cpp:208: undefined reference 
+to `SetN2kSwitchBankCommand(tN2kMsg&, unsigned char, unsigned long long)'
+collect2.exe: error: ld returned 1 exit status
+*** [.pio\build\featheresp32\firmware.elf] Error 1
+========================= [FAILED] Took 25.73 seconds =========================
+

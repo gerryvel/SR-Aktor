@@ -24,7 +24,7 @@
 #include <ArduinoJson.h>
 #include <Preferences.h>
 
-void ShowTime(){
+inline void ShowTime(){
 	time_t now = time(NULL);
 	struct tm tm_now;
 	localtime_r(&now, &tm_now);
@@ -35,7 +35,7 @@ void ShowTime(){
 
 /** Freie Speichergroesse aller 5s lesen */
 
-void freeHeapSpace(){
+inline void freeHeapSpace(){
 	static unsigned long last = millis();
 	if (millis() - last > 5000) {
 		last = millis();
@@ -46,7 +46,7 @@ void freeHeapSpace(){
 
 /** Ausgabe WIFI Parameter und Netzwerk scannen */
 
-void WiFiDiag(void) {
+inline void WiFiDiag(void) {
   Serial.println("\nWifi-Diag:");
   AP_IP = WiFi.softAPIP();
   CL_IP = WiFi.localIP();
@@ -91,7 +91,7 @@ void WiFiDiag(void) {
  * @param levels 
  */
 
-void listDir(fs::FS &fs, const char * dirname, uint8_t levels){
+inline void listDir(fs::FS &fs, const char * dirname, uint8_t levels){
     Serial.printf("Listing directory: %s\r\n", dirname);
 
     File root = fs.open(dirname);
@@ -128,7 +128,7 @@ void listDir(fs::FS &fs, const char * dirname, uint8_t levels){
  * @param filename 
  */
 
-void readConfig(String filename) {
+inline void readConfig(String filename) {
 	JsonDocument testDocument;
 	File configFile = LittleFS.open(filename);
 	if (configFile)
@@ -153,6 +153,22 @@ void readConfig(String filename) {
 			strcpy(tAP_Config.wRelay1Name, testDocument["wRelay1Name"] | "Relais 1");
       strcpy(tAP_Config.wRelay2Name, testDocument["wRelay2Name"] | "Relais 2");
       strcpy(tAP_Config.wRelay3Name, testDocument["wRelay3Name"] | "Relais 3");
+      // Optional NMEA2000 debug flag (use .is/.as to avoid deprecated containsKey)
+      if (testDocument["n2kDebug"].is<bool>()) {
+        N2kDebug = testDocument["n2kDebug"].as<bool>();
+        Serial.printf("N2kDebug set to: %s\n", N2kDebug?"true":"false");
+      } else if (testDocument["n2kDebug"].is<int>()) {
+        N2kDebug = (testDocument["n2kDebug"].as<int>() != 0);
+        Serial.printf("N2kDebug set to: %s\n", N2kDebug?"true":"false");
+      }
+      // Optional acceptBroadcastCommands flag
+      if (testDocument["acceptBroadcastCommands"].is<bool>()) {
+        AcceptBroadcastCommands = testDocument["acceptBroadcastCommands"].as<bool>();
+        Serial.printf("AcceptBroadcastCommands set to: %s\n", AcceptBroadcastCommands?"true":"false");
+      } else if (testDocument["acceptBroadcastCommands"].is<int>()) {
+        AcceptBroadcastCommands = (testDocument["acceptBroadcastCommands"].as<int>() != 0);
+        Serial.printf("AcceptBroadcastCommands set to: %s\n", AcceptBroadcastCommands?"true":"false");
+      }
 		}
 		configFile.close();
 		Serial.println("Config > file closed");
@@ -172,7 +188,7 @@ void readConfig(String filename) {
  * @return false 
  */
 
-bool writeConfig(String json)
+inline bool writeConfig(String json)
 {
     Serial.println(json);
     Serial.println("neue Konfiguration speichern");
@@ -216,7 +232,7 @@ bool writeConfig(String json)
  * @return false 
  */
 
-bool writeWebconfig(const String& name, const String& value)
+inline bool writeWebconfig(const String& name, const String& value)
 {
     Serial.println("Config > safe config data");
 
@@ -265,7 +281,7 @@ bool writeWebconfig(const String& name, const String& value)
 /***************************** I2C Bus **************************/
 /** I2C Bus auslesen, alle Geräte mit Adresse ausgegeben */
 
-void I2C_scan(void){
+inline void I2C_scan(void){
   byte error, address;
   int nDevices;
   Serial.println("Scanning...");
@@ -317,7 +333,7 @@ void I2C_scan(void){
  * @return String 
  */
 
-String sWifiStatus(int Status)
+inline String sWifiStatus(int Status)
 {
   switch(Status){
     case WL_IDLE_STATUS:return "Warten";
@@ -338,7 +354,7 @@ String sWifiStatus(int Status)
  * @return char* 
  */
 
-char* toChar(String command){
+inline char* toChar(String command){
     if(command.length()!=0){
         char *p = const_cast<char*>(command.c_str());
         return p;
