@@ -95,7 +95,7 @@ void HandleNMEA2000Msg(const tN2kMsg &N2kMsg) {
 
         bool on1 = (s1 == N2kOnOff_On);
         bool on2 = (s2 == N2kOnOff_On);
-      bool on3 = (s3 == N2kOnOff_On);
+        bool on3 = (s3 == N2kOnOff_On);
 
         digitalWrite(Relais[0], on1 ? HIGH : LOW);
         digitalWrite(Relais[1], on2 ? HIGH : LOW);
@@ -110,41 +110,98 @@ void HandleNMEA2000Msg(const tN2kMsg &N2kMsg) {
     return;
   }
 
-  // Group Function (PGN 126208) - handle Command for PGN 127502
+  // Group Function (PGN 126208) - Request fuer 127501, Command fuer 127501/127502
   if (N2kMsg.PGN == 126208L) {
     tN2kGroupFunctionCode gf;
     unsigned long PGNForGroupFunction;
-    if (tN2kGroupFunctionHandler::Parse(N2kMsg, gf, PGNForGroupFunction)) {
-      if (PGNForGroupFunction == 127502L && gf == N2kgfc_Command) {
-        uint8_t PrioritySetting = 0;
-        uint8_t NumberOfParameterPairs = 0;
-        if (tN2kGroupFunctionHandler::ParseCommandParams(N2kMsg, PrioritySetting, NumberOfParameterPairs)) {
-          int Index = 0;
-          if (tN2kGroupFunctionHandler::StartParseCommandPairParameters(N2kMsg, Index)) {
-            // Allow broadcast commands when enabled - some send Dst==0, others Dst==255
-            bool isBroadcast = (N2kMsg.Destination == 0 || N2kMsg.Destination == 255);
-            if (N2kMsg.Destination != NodeAddress && !(isBroadcast && AcceptBroadcastCommands)) {
-              // Not for us
-              return;
+    if (!tN2kGroupFunctionHandler::Parse(N2kMsg, gf, PGNForGroupFunction)) {
+      return ;
+    }
+    bool isBroadcast = (N2kMsg.Destination == 0 || N2kMsg.Destination == 255);
+    if (N2kMsg.Destination != NodeAddress && !(isBroadcast && AcceptBroadcastCommands))
+     { return;  // Nachricht ist nicht fuer uns bestimmt, ignorieren
+  }
+
+    // -----------------------------------------------------------------
+    // REQUEST GROUP FUNCTION fuer PGN 127501
+    // Der Vulcan fragt das beim Geraete-Scan ab, um zu pruefen, ob das
+    // Geraet diese PGN unterstuetzt. Ohne Antwort = kein Switching-Geraet.
+    // -----------------------------------------------------------------
+    if (PGNForGroupFunction == 127501L && gf == N2kgfc_Request) {
+      uint32_t TransmissionInterval = 0;
+      uint16_t TransmissionIntervalOffset = 0;
+      uint8_t NumberOfParameterPairs = 0;
+
+      if (tN2kGroupFunctionHandler::ParseRequestParams(N2kMsg, TransmissionInterval, TransmissionIntervalOffset, NumberOfParameterPairs)) {
+
+        tN2kMsg N2kRMsg;
+        tN2kGroupFunctionHandler::SetStartAcknowledge(N2kRMsg, N2kMsg.Source, 127501L,
+                                                       N2kgfPGNec_Acknowledge,
+                                                       N2kgfTPec_Acknowledge,
+                                                       NumberOfParameterPairs);
+        N2kRMsg.Destination = N2kMsg.Source;
+
+        for (uint8_t p = 0; p < NumberOfParameterPairs; p++) {
+          tN2kGroupFunctionHandler::AddAcknowledgeParameter(N2kRMsg, p, N2kgfpec_Acknowledge);
+        }
+        NMEA2000.SendMsg(N2kRMsg);
+
+        // Direkt im Anschluss den aktuellen Status senden, damit der Vulcan
+        // sofort echte Daten zum Aufbau der Tasten bekommt
+        SendN2kSwitchBankStatus(Rel1Status, Rel2Status, Rel3Status);
+      }
+      return;
+    }
+
+   // -----------------------------------------------------------------
+    // COMMAND GROUP FUNCTION fuer PGN 127501 oder PGN 127502
+    // Das ist der Pfad, ueber den der Vulcan beim Tastendruck im
+    // Switching-Control-Bildschirm tatsaechlich schaltet.
+    // -----------------------------------------------------------------
+    if ((PGNForGroupFunction == 127501L || PGNForGroupFunction == 127502L) && gf == N2kgfc_Command) {
+      uint8_t PrioritySetting = 0;
+      uint8_t NumberOfParameterPairs = 0;
+
+      if (tN2kGroupFunctionHandler::ParseCommandParams(N2kMsg, PrioritySetting, NumberOfParameterPairs)) {
+        int Index = 0;
+        if (tN2kGroupFunctionHandler::StartParseCommandPairParameters(N2kMsg, Index)) {
+
+          tN2kMsg N2kRMsg;
+          tN2kGroupFunctionHandler::SetStartAcknowledge(N2kRMsg, N2kMsg.Source, PGNForGroupFunction,N2kgfPGNec_Acknowledge,
+                                                         N2kgfTPec_Acknowledge,
+                                                         NumberOfParameterPairs);
+
+          for (uint8_t p = 0; p < NumberOfParameterPairs; p++) {
+            uint8_t FieldNo = N2kMsg.GetByte(Index);
+            uint8_t FieldValue = N2kMsg.GetByte(Index);
+            tN2kGroupFunctionParameterErrorCode PARec = N2kgfpec_Acknowledge;
+
+            if (FieldNo >= 1 && FieldNo <= 3) {
+              bool on = (FieldValue != 0);
+              digitalWrite(Relais[FieldNo - 1], on ? HIGH : LOW);
+            } else if (FieldNo != 0) {
+              // Field 0 wird von manchen MFDs als "Bank Instance" o.ae. genutzt,
+              // alles andere Unbekannte als ungueltig markieren
+              PARec = N2kgfpec_InvalidRequestOrCommandParameterField;
             }
-            for (uint8_t p = 0; p < NumberOfParameterPairs; p++) {
-              uint8_t FieldNo = N2kMsg.GetByte(Index);
-              uint8_t FieldValue = N2kMsg.GetByte(Index);
-              if (FieldNo >= 1 && FieldNo <= 3) {
-                bool on = (FieldValue != 0);
-                digitalWrite(Relais[FieldNo - 1], on ? HIGH : LOW);
-              }
-            }
-            // Update status vars and send an immediate status report
-            Rel1Status = digitalRead(Relais[0]);
-            Rel2Status = digitalRead(Relais[1]);
-            Rel3Status = digitalRead(Relais[2]);
-            SendN2kSwitchBankStatus(Rel1Status, Rel2Status, Rel3Status);
+
+            tN2kGroupFunctionHandler::AddAcknowledgeParameter(N2kRMsg, p, PARec);
           }
+
+          // Acknowledge ist Pflicht! Ohne das erkennt der Vulcan dein
+          // Geraet nicht als reagierendes Switching-Control-Device.
+          NMEA2000.SendMsg(N2kRMsg);
+
+          // Update status vars and send an immediate status report
+          Rel1Status = digitalRead(Relais[0]);
+          Rel2Status = digitalRead(Relais[1]);
+          Rel3Status = digitalRead(Relais[2]);
+          SendN2kSwitchBankStatus(Rel1Status, Rel2Status, Rel3Status);
         }
       }
+      return;
     }
-    return;
+    return; // andere Group Functions / PGNs werden hier nicht behandelt
   }
 }
 
@@ -317,20 +374,12 @@ void SendN2kSwitchBankStatus(bool Status1, bool Status2, bool Status3) {
   }
 }
 
-
-void SetN2kPGN126208(tN2kMsg &N2kMsg, unsigned char DeviceBankInstance, tN2kBinaryStatus BankStatus) {
-    N2kMsg.SetPGN(126208L);
-    N2kMsg.Priority=3;
-	BankStatus = (BankStatus << 8) | DeviceBankInstance;
-	N2kMsg.AddUInt64(BankStatus);
-}  
-
-//*****************************************************************************
+//*****
 inline void SetN2kSwitchBankCommand(tN2kMsg &N2kMsg, unsigned char DeviceBankInstance, tN2kBinaryStatus BankStatus) {
   SetN2kPGN127502(N2kMsg,DeviceBankInstance,BankStatus);
 }
 
-//*****************************************************************************
+//*****
 void SetSwitch(unsigned char DeviceBankInstance, uint8_t SwitchIndex, bool ItemStatus) {
   tN2kBinaryStatus BankStatus;
   tN2kMsg N2kMsg;
@@ -344,28 +393,6 @@ void SetSwitch(unsigned char DeviceBankInstance, uint8_t SwitchIndex, bool ItemS
 #define PRIORITY_DO_NOT_CHANGE    0x08
 #define RESERVED_4_BITS_SET_TO_1  0x0f
 
-void SetN2kGroupFunctionCommand126208(tN2kMsg &N2kMsg, unsigned char DestinationId,
-                     unsigned char FieldNoOfParam, unsigned char FieldValue) {
-    N2kMsg.SetPGN(126208L);
-    N2kMsg.Priority    = 3;
-    N2kMsg.Destination = DestinationId;
-    N2kMsg.AddByte(N2kgfc_Command);     // field 1
-    N2kMsg.Add3ByteInt(126208L);        // field 2 : Commanded PGN
-                                        // field 3 : Priority Setting
-                                        // field 4 : NMEA Reserved
-    N2kMsg.AddByte(PRIORITY_DO_NOT_CHANGE | RESERVED_4_BITS_SET_TO_1<<4);
-    N2kMsg.AddByte(1);                  // field 5 : Number of Pairs .. to follow
-    N2kMsg.AddByte(FieldNoOfParam);     // field 6 : Field No of commanded param
-    N2kMsg.AddByte(FieldValue);         // field 7 : Value of commanded param
-}
-
-void sendSwitchCommand(unsigned char DestinationId, unsigned char FieldNoOfParam, unsigned char FieldValue)
-{
-    tN2kMsg N2kMsg;
-    SetN2kGroupFunctionCommand126208(N2kMsg, DestinationId, FieldNoOfParam, FieldValue);
-    NMEA2000.SendMsg(N2kMsg);
-}
-  
 void CheckSourceAddressChange() {
   int SourceAddress = NMEA2000.GetN2kSource();
 
@@ -377,32 +404,13 @@ void CheckSourceAddressChange() {
     Serial.printf("Address Change: New Address=%d\n", SourceAddress);
   }
 }
+
 /************************************ Loop ***********************************/
 void loop() {
+
   static unsigned long lastSwitchControlAnnounce = 0;
 
   SendN2kSwitchBankStatus(Rel1Status, Rel2Status, Rel3Status);
-
-  // Compatibility: periodically announce full switch control bank (PGN127502)
-  // so MFDs can build a full switch list reliably.
-  if (millis() - lastSwitchControlAnnounce >= 1000UL) {
-    tN2kBinaryStatus controlBankStatus;
-    tN2kMsg controlMsg;
-
-    lastSwitchControlAnnounce = millis();
-
-    Rel1Status = GetRelayLogicalState(0);
-    Rel2Status = GetRelayLogicalState(1);
-    Rel3Status = GetRelayLogicalState(2);
-
-    N2kResetBinaryStatus(controlBankStatus);
-    N2kSetStatusBinaryOnStatus(controlBankStatus, Rel1Status ? N2kOnOff_On : N2kOnOff_Off, 1);
-    N2kSetStatusBinaryOnStatus(controlBankStatus, Rel2Status ? N2kOnOff_On : N2kOnOff_Off, 2);
-    N2kSetStatusBinaryOnStatus(controlBankStatus, Rel3Status ? N2kOnOff_On : N2kOnOff_Off, N2K_THIRD_SWITCH_ITEM);
-
-    SetN2kSwitchBankCommand(controlMsg, 0, controlBankStatus);
-    NMEA2000.SendMsg(controlMsg);
-  }
 
   NMEA2000.ParseMessages();
   CZone_Loop();
@@ -422,9 +430,9 @@ void loop() {
  * 
  */
   
-    sCL_Status = sWifiStatus(WiFi.status());
-    sAP_Station = WiFi.softAPgetStationNum();
-    freeHeapSpace();
+  sCL_Status = sWifiStatus(WiFi.status());
+  sAP_Station = WiFi.softAPgetStationNum();
+  freeHeapSpace();
 
   Rel1Status = GetRelayLogicalState(0);
   Rel2Status = GetRelayLogicalState(1);
