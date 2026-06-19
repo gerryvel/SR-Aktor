@@ -22,7 +22,7 @@ bool GetRelayLogicalState(int relayIndex);
 #define CZoneMessageAlt 0x9913
 #define CzSwitchBank1SerialNumDefault  0x19
 #define CzSwitchBank2SerialNumDefault  0x1b
-#define CzDipSwitch     200
+#define CzDipSwitch     0x80 // bitmask for CZone dipswitch settings; default to 0x80 (dip 8 ON, rest OFF) as per supplied code
 #define BinaryDeviceInstance 0x00
 #define SwitchBankInstance 0x00
 #define NumberOfSwitches 4
