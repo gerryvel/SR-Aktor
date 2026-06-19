@@ -22,8 +22,6 @@
 AsyncWebServer server(80);
 WebSocketsServer webSocket = WebSocketsServer(81);  // WebSocket server on port 81
 
-// Forward declaration for helper in sr-aktor.ino to send test commands
-void sendSwitchCommand(unsigned char DestinationId, unsigned char FieldNoOfParam, unsigned char FieldValue);
 
 // Info Board for HTML-Output
 String sBoardInfo;
@@ -157,7 +155,7 @@ void initWebsite() {
             // Parse JSON so we can apply some settings immediately (no reboot needed)
             String jsonToSave = json; // default
             {
-                StaticJsonDocument<1024> doc;
+                JsonDocument doc;
                 DeserializationError err = deserializeJson(doc, json);
                 if (!err) {
                     Serial.println("Parsed JSON:");
@@ -279,24 +277,5 @@ void initWebsite() {
             }
             out += "]";
             request->send(200, "application/json", out);
-        });
-
-        // Test endpoint: send a PGN126208 Group Function Command that targets PGN127502
-        // Usage: /test126208?dst=<node|255>&field=<1..3>&val=<0|1>
-        server.on("/test126208", HTTP_GET, [] (AsyncWebServerRequest *request) {
-            unsigned int dst = NodeAddress;
-            unsigned int field = 1;
-            unsigned int val = 1;
-            if (request->hasParam("dst")) dst = request->getParam("dst")->value().toInt();
-            if (request->hasParam("field")) field = request->getParam("field")->value().toInt();
-            if (request->hasParam("val")) val = request->getParam("val")->value().toInt();
-            if (field < 1 || field > 3) {
-                request->send(400, "text/plain", "field must be 1..3");
-                return;
-            }
-            if (val > 1) val = 1;
-            Serial.printf("Test126208: sending to dst=%u field=%u val=%u\n", dst, field, val);
-            sendSwitchCommand((unsigned char)dst, (unsigned char)field, (unsigned char)val);
-            request->send(200, "text/plain", "sent");
         });
 }
