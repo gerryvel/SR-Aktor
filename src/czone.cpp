@@ -22,7 +22,7 @@ bool GetRelayLogicalState(int relayIndex);
 #define CZoneMessageAlt 0x9913
 #define CzSwitchBank1SerialNumDefault  0x19
 #define CzSwitchBank2SerialNumDefault  0x1b
-#define CzDipSwitch     200
+#define CzDipSwitch     0x80 // bitmask for CZone dipswitch settings; default to 0x80 (dip 8 ON, rest OFF) as per supplied code
 #define BinaryDeviceInstance 0x00
 #define SwitchBankInstance 0x00
 #define NumberOfSwitches 4
@@ -30,12 +30,12 @@ bool GetRelayLogicalState(int relayIndex);
 #define CzConfig1 0x03
 #define CzConfig2 0x0F
 
-#if ENABLE_CZONE
 // Internal states
 static uint8_t CzSwitchState1 = 0;
 static uint8_t CzSwitchState2 = 0;
 static uint8_t CzMfdDisplaySyncState1 = 0;
 static uint8_t CzMfdDisplaySyncState2 = 0;
+static unsigned long CzLastAbsCmdMs[9] = {0};
 static bool CzConfigAuthenticated = false;
 static uint8_t CzSwitchBank1SerialNum = CzSwitchBank1SerialNumDefault;
 static uint8_t CzSwitchBank2SerialNum = CzSwitchBank2SerialNumDefault;
@@ -52,17 +52,6 @@ static void LearnCZoneHeader(uint16_t hdr) {
   }
 }
 
-static void SendCZoneMsgWithMirroredHeader(const tN2kMsg &msg) {
-  NMEA2000.SendMsg(msg);
-  if (msg.DataLen < 2) return;
-
-  const uint16_t altHeader = (CzTxHeader == CZoneMessage) ? CZoneMessageAlt : CZoneMessage;
-  tN2kMsg mirror = msg;
-  mirror.Data[0] = (uint8_t)(altHeader & 0xFF);
-  mirror.Data[1] = (uint8_t)((altHeader >> 8) & 0xFF);
-  NMEA2000.SendMsg(mirror);
-}
-
 // Forward declarations for local helpers
 static void SetChangeSwitchState_CZ(uint8_t SwitchIndex, bool ItemStatus);
 static void SetCZoneSwitchState127501_CZ(unsigned char DeviceInstance);
@@ -72,16 +61,12 @@ static void SetCZoneSwitchHeartbeat65284_CZ(unsigned char CzSwitchBankSerialNum)
 static void SetCZoneSendConfigToMFD65290_CZ(unsigned char CzSwitchBankSerial, uint8_t CZoneConfig0, uint8_t CZoneConfig1, uint8_t CZoneConfig2);
 static void SetCZoneSwitchStateBroadcast130817_CZ(unsigned char CzSwitchBankSerialNum);
 static void SyncCZoneStateFromRelays();
-#endif // ENABLE_CZONE
 
 void CZone_Init() {
-#if ENABLE_CZONE
   // nothing to init presently; handlers are checked by caller
-#endif
 }
 
 void CZone_Loop() {
-#if ENABLE_CZONE
   static unsigned long nextHeartbeat = 0;
   static unsigned long nextStateBroadcast = 0;
   const unsigned long now = millis();
@@ -91,22 +76,16 @@ void CZone_Loop() {
   if ((long)(now - nextHeartbeat) >= 0) {
     nextHeartbeat = now + 1000UL;
     SetCZoneSwitchHeartbeat65284_CZ(CzSwitchBank1SerialNum);
-    SetCZoneSwitchChangeAck65283_CZ(CzSwitchBank1SerialNum);
   }
 
   if ((long)(now - nextStateBroadcast) >= 0) {
     nextStateBroadcast = now + 500UL;
     SetCZoneSwitchStateBroadcast130817_CZ(CzSwitchBank1SerialNum);
   }
-#endif
 }
 
 // Return true if message handled by CZone parser
 bool CZone_HandleMsg(const tN2kMsg &msg) {
-#if !ENABLE_CZONE
-  (void)msg;
-  return false; // CZone deaktiviert: Nachricht nicht konsumieren, an Standard-Handler weitergeben
-#else
   // Only handle known PGNs
   switch (msg.PGN) {
     case 65280UL: // MFD -> switch change
@@ -176,10 +155,8 @@ bool CZone_HandleMsg(const tN2kMsg &msg) {
             // Common ON encodings seen on CZone pages.
             handleAbs = true;
             absOut = true;
-          } else if (iState == 0xF2 || iState == 0x41 || iState == 0x40 || iState == 0x00 || iState == 0x10) {
+          } else if (iState == 0xF2 || iState == 0x41 || iState == 0x00 || iState == 0x10) {
             // Common OFF encodings seen on CZone pages.
-            // 0x40 confirmed as the "OFF" button code on B&G Vulcan (mirrors 0xF1 for ON,
-            // same frame layout b2=05,b3=00,b4=00,b5=01, only b6 differs F1 vs 40).
             handleAbs = true;
             absOut = false;
           } else if (iState == 0x42) {
@@ -187,8 +164,8 @@ bool CZone_HandleMsg(const tN2kMsg &msg) {
             ignoreSwitchCommand = true;
           } else if (iState == 0x02 || iState == 0x03) {
             if (hdr == CZoneMessageAlt) {
-              // 0x9913 with 0x02/0x03 appears periodically as display sync on Vulcan.
-              // Do not actuate relays from these frames to avoid auto-retrigger after local OFF.
+              // 0x9913 with 0x02/0x03 appears as sync/keepalive on Vulcan.
+              // Do not actuate relays from these frames.
               ignoreSwitchCommand = true;
             } else {
               // On non-0x9913 variants still allow explicit absolute state from b4/b5 if present.
@@ -216,10 +193,15 @@ bool CZone_HandleMsg(const tN2kMsg &msg) {
           }
 
           if (ignoreSwitchCommand) {
+            // Keep MFD in sync even for frames we intentionally ignore.
+            SetCZoneSwitchStateBroadcast130817_CZ(CzSwitchBank1SerialNum);
+            SetCZoneSwitchHeartbeat65284_CZ(CzSwitchBank1SerialNum);
+            SetCZoneSwitchChangeAck65283_CZ(CzSwitchBank1SerialNum);
             return true;
           }
 
           if (handleAbs) {
+            const bool prevOut = ((*state & mask) != 0);
             if (absOut) {
               *state |= mask;
               *syncState |= mask;
@@ -227,19 +209,28 @@ bool CZone_HandleMsg(const tN2kMsg &msg) {
               *state &= ~mask;
               *syncState &= ~mask;
             }
-            SetChangeSwitchState_CZ(switchIndex, absOut);
-            // Send updated state immediately after command
+            const bool newOut = ((*state & mask) != 0);
+            if (switchIndex <= 8) {
+              CzLastAbsCmdMs[switchIndex] = millis();
+            }
+            if (prevOut != newOut) {
+              SetChangeSwitchState_CZ(switchIndex, absOut);
+              // Send updated state immediately after command
+              SetCZoneSwitchStateBroadcast130817_CZ(CzSwitchBank1SerialNum);
+              SetCZoneSwitchChangeAck65283_CZ(CzSwitchBank1SerialNum);
+              SetCZoneSwitchHeartbeat65284_CZ(CzSwitchBank1SerialNum);
+            }
+          } else if (iState != 0x40) {
+            // Unknown command state: do not toggle outputs, only acknowledge current state.
             SetCZoneSwitchStateBroadcast130817_CZ(CzSwitchBank1SerialNum);
-            SetCZoneSwitchChangeAck65283_CZ(CzSwitchBank1SerialNum);
             SetCZoneSwitchHeartbeat65284_CZ(CzSwitchBank1SerialNum);
-          } else {
-            // Fallback for undocumented command states: behave as toggle.
-            *state ^= mask;
-            *syncState ^= mask;
-            SetChangeSwitchState_CZ(switchIndex, ((*state & mask) != 0));
+            SetCZoneSwitchChangeAck65283_CZ(CzSwitchBank1SerialNum);
+          } else if (iState == 0x40) {
+            // End-of-change marker from MFD: acknowledge, but never toggle outputs on 0x40.
             SetCZoneSwitchStateBroadcast130817_CZ(CzSwitchBank1SerialNum);
-            SetCZoneSwitchChangeAck65283_CZ(CzSwitchBank1SerialNum);
             SetCZoneSwitchHeartbeat65284_CZ(CzSwitchBank1SerialNum);
+            if (bit > 0x08) SetCZoneSwitchChangeAck65283_CZ(CzSwitchBank2SerialNum);
+            else SetCZoneSwitchChangeAck65283_CZ(CzSwitchBank1SerialNum);
           }
           return true;
         }
@@ -254,11 +245,37 @@ bool CZone_HandleMsg(const tN2kMsg &msg) {
         CzLastRequester = msg.Source;
         LearnCZoneHeader(hdr);
         idx = 7;
-        if (CzDipSwitch != msg.GetByte(idx)) return false;
+        const uint8_t reqDip = msg.GetByte(idx);
+        if (reqDip != CzDipSwitch && reqDip != 0xFF && reqDip != 0x7F && reqDip != 0x00) {
+          if (N2kDebug) Serial.printf("CZone 65290: dip mismatch req=%u expected=%u\n", (unsigned)reqDip, (unsigned)CzDipSwitch);
+          return false;
+        }
         SetCZoneSendConfigToMFD65290_CZ(CzSwitchBank1SerialNum, CzConfig0, CzConfig1, CzConfig2);
         SetCZoneSwitchHeartbeat65284_CZ(CzSwitchBank1SerialNum);
         SetCZoneSwitchStateBroadcast130817_CZ(CzSwitchBank1SerialNum);
         if (NumberOfSwitches == 8) SetCZoneSendConfigToMFD65290_CZ(CzSwitchBank2SerialNum, CzConfig0, CzConfig1, CzConfig2);
+        return true;
+      }
+      break;
+
+    case 65294UL: // Provisioning/import handshake from MFD
+      {
+        int idx = 0;
+        const uint16_t hdr = msg.Get2ByteUInt(idx);
+        if (hdr != CZoneMessage && hdr != CZoneMessageAlt) return false;
+        CzLastRequester = msg.Source;
+        LearnCZoneHeader(hdr);
+        CzConfigAuthenticated = true;
+
+        if (N2kDebug) {
+          Serial.printf("CZone 65294: import/provision req b2=%02X b3=%02X b4=%02X b5=%02X b6=%02X b7=%02X\n",
+            msg.Data[2], msg.Data[3], msg.Data[4], msg.Data[5], msg.Data[6], msg.Data[7]);
+        }
+
+        SetCZoneSendConfigToMFD65290_CZ(CzSwitchBank1SerialNum, CzConfig0, CzConfig1, CzConfig2);
+        SetCZoneSwitchHeartbeat65284_CZ(CzSwitchBank1SerialNum);
+        SetCZoneSwitchChangeAck65283_CZ(CzSwitchBank1SerialNum);
+        SetCZoneSwitchStateBroadcast130817_CZ(CzSwitchBank1SerialNum);
         return true;
       }
       break;
@@ -287,7 +304,6 @@ bool CZone_HandleMsg(const tN2kMsg &msg) {
         CzConfigAuthenticated = true;
         SetCZoneSendConfigToMFD65290_CZ(CzSwitchBank1SerialNum, CzConfig0, CzConfig1, CzConfig2);
         SetCZoneSwitchHeartbeat65284_CZ(CzSwitchBank1SerialNum);
-        SetCZoneSwitchChangeAck65283_CZ(CzSwitchBank1SerialNum);
         SetCZoneSwitchStateBroadcast130817_CZ(CzSwitchBank1SerialNum);
         return true;
       }
@@ -297,10 +313,8 @@ bool CZone_HandleMsg(const tN2kMsg &msg) {
       return false;
   }
   return false;
-#endif // ENABLE_CZONE
 }
 
-#if ENABLE_CZONE
 static void SyncCZoneStateFromRelays() {
   CzSwitchState1 = 0;
   CzMfdDisplaySyncState1 = 0;
@@ -330,7 +344,6 @@ static void SetChangeSwitchState_CZ(uint8_t SwitchIndex, bool ItemStatus) {
   if (millis() > BootBlockUntil) {
     SetCZoneSwitchState127501_CZ(BinaryDeviceInstance);
     SetCZoneSwitchChangeRequest127502_CZ(SwitchBankInstance, SwitchIndex, ItemStatus);
-    SetCZoneSwitchChangeAck65283_CZ(CzSwitchBank1SerialNum);
     SetCZoneSwitchHeartbeat65284_CZ(CzSwitchBank1SerialNum);
     SetCZoneSwitchStateBroadcast130817_CZ(CzSwitchBank1SerialNum);
   }
@@ -355,7 +368,7 @@ static void SetCZoneSwitchState127501_CZ(unsigned char DeviceInstance) {
   N2kSetStatusBinaryOnStatus(BankStatus, report3 ? N2kOnOff_On : N2kOnOff_Off, N2K_THIRD_SWITCH_ITEM);
 
   SetN2kPGN127501(N2kMsg, DeviceInstance, BankStatus);
-  SendCZoneMsgWithMirroredHeader(N2kMsg);
+  NMEA2000.SendMsg(N2kMsg);
 }
 
 static void SetCZoneSwitchChangeRequest127502_CZ(unsigned char DeviceInstance, uint8_t SwitchIndex, bool ItemStatus)
@@ -365,7 +378,7 @@ static void SetCZoneSwitchChangeRequest127502_CZ(unsigned char DeviceInstance, u
   N2kResetBinaryStatus(status);
   N2kSetStatusBinaryOnStatus(status, ItemStatus ? N2kOnOff_On : N2kOnOff_Off, SwitchIndex);
   SetN2kPGN127502(N2kMsg, SwitchBankInstance, status);
-  SendCZoneMsgWithMirroredHeader(N2kMsg);
+  NMEA2000.SendMsg(N2kMsg);
 }
 
 static void SetCZoneSwitchChangeAck65283_CZ(unsigned char CzSwitchBankSerialNum) {
@@ -384,7 +397,7 @@ static void SetCZoneSwitchChangeAck65283_CZ(unsigned char CzSwitchBankSerialNum)
   N2kMsg.Add2ByteUInt(0x0000);
   N2kMsg.AddByte(0x00);
   N2kMsg.AddByte(0x10);
-  SendCZoneMsgWithMirroredHeader(N2kMsg);
+  NMEA2000.SendMsg(N2kMsg);
 }
 
 static void SetCZoneSwitchHeartbeat65284_CZ(unsigned char CzSwitchBankSerialNum) {
@@ -404,7 +417,7 @@ static void SetCZoneSwitchHeartbeat65284_CZ(unsigned char CzSwitchBankSerialNum)
   else N2kMsg.AddByte(CzSwitchState2);
   N2kMsg.Add2ByteUInt(0x0000);
   N2kMsg.AddByte(0x00);
-  SendCZoneMsgWithMirroredHeader(N2kMsg);
+  NMEA2000.SendMsg(N2kMsg);
 }
 
 static void SetCZoneSendConfigToMFD65290_CZ(unsigned char CzSwitchBankSerial, uint8_t CZoneConfig0, uint8_t CZoneConfig1, uint8_t CZoneConfig2) {
@@ -425,7 +438,7 @@ static void SetCZoneSendConfigToMFD65290_CZ(unsigned char CzSwitchBankSerial, ui
   N2kMsg.Add2ByteUInt(0x0000);
   N2kMsg.AddByte(CzSwitchBankSerial);
   CzConfigAuthenticated = true;
-  SendCZoneMsgWithMirroredHeader(N2kMsg);
+  NMEA2000.SendMsg(N2kMsg);
 }
 
 static void SetCZoneSwitchStateBroadcast130817_CZ(unsigned char CzSwitchBankSerialNum) {
@@ -456,6 +469,5 @@ static void SetCZoneSwitchStateBroadcast130817_CZ(unsigned char CzSwitchBankSeri
   }
   N2kMsg.Add3ByteInt(0);
   N2kMsg.Add3ByteInt(0);
-  SendCZoneMsgWithMirroredHeader(N2kMsg);
+  NMEA2000.SendMsg(N2kMsg);
 }
-#endif // ENABLE_CZONE
