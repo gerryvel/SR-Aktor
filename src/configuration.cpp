@@ -95,6 +95,7 @@ bool InvertN2kStatus = false;
 
 bool N2kDebug = false;
 bool AcceptBroadcastCommands = true;
+bool CZoneEnableConfigProtocol = true;
 unsigned long LastReceivedN2kPGN = 0;
 String LastReceivedN2kText = "";
 unsigned long BootBlockUntil = 0;

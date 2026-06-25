@@ -14,7 +14,7 @@
 #include <Preferences.h>
 
 // Versionierung
-#define VersionSoftware "1.2.0.0 (2026-06-11)"  // Version Software
+#define VersionSoftware "1.0.1.0 (2025-10-11)"  // Version Software
 #define VersionHardware "1.1.0.0 (2025-08-07)"  // Version Hardware
 
 /**
@@ -23,6 +23,14 @@
 #define ESP32_CAN_TX_PIN GPIO_NUM_4  // Set CAN TX port to 4 
 #define ESP32_CAN_RX_PIN GPIO_NUM_5  // Set CAN RX port to 5
 #define N2K_SOURCE 15
+
+// --- Test-Schalter: CZone Protokoll komplett aktivieren/deaktivieren ---
+// 1 = CZone Pakete werden gesendet/verarbeitet (Originalverhalten)
+// 0 = Nur Standard-NMEA2000 PGNs (127501/127502/126208), kein CZone-Traffic.
+//     Zum Testen, ob das MFD auch ohne CZone eine Switching-Seite anlegt.
+#ifndef ENABLE_CZONE
+#define ENABLE_CZONE 1
+#endif
 
 // General timing / offsets
 #define SwitchControlSendOffset 0
