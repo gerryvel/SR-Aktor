@@ -311,10 +311,12 @@ void SendN2kSwitchBankStatus(bool Status1, bool Status2, bool Status3) {
     const bool report2 = InvertN2kStatus ? !Status2 : Status2;
     const bool report3 = InvertN2kStatus ? !Status3 : Status3;
 
-    // Build full bank status and place relay 3 on configured item index.
+    // Vulcan 6.11.8.0 needs an explicit empty slot 4, otherwise the third relay
+    // disappears from the standard device list even though item 3 is populated.
     N2kSetStatusBinaryOnStatus(bankStatus, report1 ? N2kOnOff_On : N2kOnOff_Off, 1);
     N2kSetStatusBinaryOnStatus(bankStatus, report2 ? N2kOnOff_On : N2kOnOff_Off, 2);
     N2kSetStatusBinaryOnStatus(bankStatus, report3 ? N2kOnOff_On : N2kOnOff_Off, N2K_THIRD_SWITCH_ITEM);
+    N2kSetStatusBinaryOnStatus(bankStatus, N2kOnOff_Unavailable, 4);
     SetN2kPGN127501(N2kMsg, 0, bankStatus);
 
         // Diagnostic: print message bytes only when N2kDebug is enabled.
@@ -409,6 +411,8 @@ void loop() {
     N2kSetStatusBinaryOnStatus(controlBankStatus, Rel1Status ? N2kOnOff_On : N2kOnOff_Off, 1);
     N2kSetStatusBinaryOnStatus(controlBankStatus, Rel2Status ? N2kOnOff_On : N2kOnOff_Off, 2);
     N2kSetStatusBinaryOnStatus(controlBankStatus, Rel3Status ? N2kOnOff_On : N2kOnOff_Off, N2K_THIRD_SWITCH_ITEM);
+    // Match the same placeholder on the announced control bank.
+    N2kSetStatusBinaryOnStatus(controlBankStatus, N2kOnOff_Unavailable, 4);
 
     SetN2kSwitchBankCommand(controlMsg, 0, controlBankStatus);
     NMEA2000.SendMsg(controlMsg);
