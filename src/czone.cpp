@@ -31,7 +31,6 @@ bool GetRelayLogicalState(int relayIndex);
 #define CzConfig1 0x03
 #define CzConfig2 0x0F
 
-#if ENABLE_CZONE
 // Internal states
 static uint8_t CzSwitchState1 = 0;
 static uint8_t CzSwitchState2 = 0;
@@ -141,16 +140,8 @@ static void SetCZoneDataBlockAck65291_CZ(uint8_t target, uint16_t blockIndex, ui
 static void CzSendOneBlock(uint16_t blockIdx);
 static void SendCZoneConfigAs130816_CZ();
 static void SyncCZoneStateFromRelays();
-#endif // ENABLE_CZONE
-
-void CZone_Init() {
-#if ENABLE_CZONE
-  // nothing to init presently; handlers are checked by caller
-#endif
-}
 
 void CZone_Loop() {
-#if ENABLE_CZONE
   const unsigned long now = millis();
 
   SyncCZoneStateFromRelays();
@@ -210,15 +201,10 @@ void CZone_Loop() {
     CzZcfRxActive = false;
     LittleFS.remove(CzZcfTmpPath);
   }
-#endif
 }
 
 // Return true if message handled by CZone parser
 bool CZone_HandleMsg(const tN2kMsg &msg) {
-#if !ENABLE_CZONE
-  (void)msg;
-  return false; // CZone deaktiviert: Nachricht nicht konsumieren, an Standard-Handler weitergeben
-#else
   // Only handle known PGNs
   switch (msg.PGN) {
     case 65280UL: // MFD -> switch change
@@ -647,10 +633,8 @@ bool CZone_HandleMsg(const tN2kMsg &msg) {
       return false;
   }
   return false;
-#endif // ENABLE_CZONE
 }
 
-#if ENABLE_CZONE
 static void SyncCZoneStateFromRelays() {
   CzSwitchState1 = 0;
   CzMfdDisplaySyncState1 = 0;
@@ -910,4 +894,3 @@ static void SendCZoneConfigAs130816_CZ() {
   if (N2kDebug) Serial.println("CZone 130816 tx: start block 0");
   CzSendOneBlock(0);
 }
-#endif // ENABLE_CZONE

@@ -232,7 +232,6 @@ void setup() {
   
 // Init NMEA2000
   initNMEA2000();
-  CZone_Init();
 
   // Register incoming NMEA2000 message handler so we can react to remote commands
   NMEA2000.SetMsgHandler(HandleNMEA2000Msg);
