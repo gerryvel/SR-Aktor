@@ -311,8 +311,7 @@ void SendN2kSwitchBankStatus(bool Status1, bool Status2, bool Status3) {
     const bool report2 = InvertN2kStatus ? !Status2 : Status2;
     const bool report3 = InvertN2kStatus ? !Status3 : Status3;
 
-    // Vulcan 6.11.8.0 needs an explicit empty slot 4, otherwise the third relay
-    // disappears from the standard device list even though item 3 is populated.
+    // Build full bank status and keep a deliberate empty slot 4 for Vulcan compatibility.
     N2kSetStatusBinaryOnStatus(bankStatus, report1 ? N2kOnOff_On : N2kOnOff_Off, 1);
     N2kSetStatusBinaryOnStatus(bankStatus, report2 ? N2kOnOff_On : N2kOnOff_Off, 2);
     N2kSetStatusBinaryOnStatus(bankStatus, report3 ? N2kOnOff_On : N2kOnOff_Off, N2K_THIRD_SWITCH_ITEM);
@@ -411,7 +410,6 @@ void loop() {
     N2kSetStatusBinaryOnStatus(controlBankStatus, Rel1Status ? N2kOnOff_On : N2kOnOff_Off, 1);
     N2kSetStatusBinaryOnStatus(controlBankStatus, Rel2Status ? N2kOnOff_On : N2kOnOff_Off, 2);
     N2kSetStatusBinaryOnStatus(controlBankStatus, Rel3Status ? N2kOnOff_On : N2kOnOff_Off, N2K_THIRD_SWITCH_ITEM);
-    // Match the same placeholder on the announced control bank.
     N2kSetStatusBinaryOnStatus(controlBankStatus, N2kOnOff_Unavailable, 4);
 
     SetN2kSwitchBankCommand(controlMsg, 0, controlBankStatus);

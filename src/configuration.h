@@ -40,8 +40,7 @@
 #define BatteryDCStatusSendOffset 160
 #define SlowDataUpdatePeriod 1000  // Time between CAN Messages sent
 // NMEA2000 item index for the third relay on PGN127501/127502.
-// Vulcan CZone 6.11.8.0 only showed all three relays reliably when relay 3
-// stayed on item 3 and slot 4 was still sent as an explicit unavailable slot.
+// Standard item index for the third relay on PGN127501/127502.
 #define N2K_THIRD_SWITCH_ITEM 3
 
 // Configuration Website
