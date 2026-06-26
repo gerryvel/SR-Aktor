@@ -5,8 +5,8 @@
  * @file configuration.h
  * @author Gerry Sebb
  * @brief Konfiguration für GPIO und Variable
- * @version 2.3
- * @date 2025-01-06
+ * @version 2.4
+ * @date 2026-06-26
  */
 
 // Core Arduino includes (provides String, IPAddress, uint8_t, etc.)
@@ -14,7 +14,7 @@
 #include <Preferences.h>
 
 // Versionierung
-#define VersionSoftware "1.3.1.0 (2026-06-26)"  // Version Software
+#define VersionSoftware "1.3.2.0 (2026-06-26)"  // Version Software
 #define VersionHardware "1.1.0.0 (2025-08-07)"  // Version Hardware
 
 /**
