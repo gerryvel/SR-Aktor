@@ -68,7 +68,7 @@ void initNMEA2000() {
   uint32_t id_local = (uint32_t)(mac & 0xFFFFFFFF);
 
   const unsigned long TransmitMessages[] PROGMEM = {127501L, 127502L, 126208L, 130817L, 65283L, 65284L, 65290L, 0};
-  const unsigned long ReciveMessages[] PROGMEM = {127501L, 127502L, 126208L, 65280L, 65284L, 65288L, 65290L, 0};
+  const unsigned long ReciveMessages[] PROGMEM = {127501L, 127502L, 126208L, 65280L, 65284L, 65288L, 65290L, 65291L, 65294L, 130816L, 130822L, 0};
 
   NMEA2000.SetProductInformation("SR03.2510", 100, "SR Switch Module", VersionSoftware, VersionHardware);
   NMEA2000.SetDeviceInformation(id_local, 140, 30, 717);

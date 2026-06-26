@@ -8,6 +8,7 @@
 #include "configuration.h"
 // Avoid including NMEA2000_CAN which creates a global instance in multiple TUs
 #include "NMEA2000.h"
+#include <LittleFS.h>
 extern tNMEA2000 &NMEA2000;
 
 // Relay helpers are implemented in init.h
@@ -41,6 +42,36 @@ static uint8_t CzSwitchBank1SerialNum = CzSwitchBank1SerialNumDefault;
 static uint8_t CzSwitchBank2SerialNum = CzSwitchBank2SerialNumDefault;
 static uint16_t CzTxHeader = CZoneMessage;
 static uint8_t CzLastRequester = 255;
+static const char *CzZcfTmpPath = "/czone_upload.tmp";
+static const char *CzZcfFinalPath = "/config.zcf";
+static bool CzZcfRxActive = false;
+static uint16_t CzZcfNextBlock = 0;
+static size_t CzZcfBytesReceived = 0;
+static unsigned long CzZcfRxLastMs = 0;
+static const unsigned long CzZcfRxTimeoutMs = 4000;
+static unsigned long CzLastConfigPushMs = 0;
+static const unsigned long CzConfigPushCooldownMs = 8000;
+static const unsigned long CzTransferStartMinUptimeMs = 15000;
+static const bool CzAllowOutboundConfigTx = false;
+static unsigned long CzLastTxRejectMs = 0;
+static const unsigned long CzTxRejectCooldownMs = 1000;
+static unsigned long CzTransferRejectUntilMs = 0;
+static unsigned long CzAnnounceUntilMs = 0;
+static unsigned long CzNextAnnounceMs = 0;
+static unsigned long CzLast65288ResponseMs = 0;
+static const unsigned long Cz65288ResponseMinIntervalMs = 15000;
+static uint8_t CzLastReportedState1 = 0xFF;
+static uint8_t CzLastReportedState2 = 0xFF;
+// ZCF TX state machine (module → MFD block-by-block)
+static bool CzZcfTxActive = false;
+static uint16_t CzZcfTxBlock = 0;
+static unsigned long CzZcfTxLastMs = 0;
+static const unsigned long CzZcfTxRetryMs = 2000;
+static uint8_t CzZcfTxRetries = 0;
+static const uint8_t CzZcfTxRetryMax = 3;
+static const uint8_t CzModuleAddress = 0x18;
+static const size_t CZoneDataBlockHeaderLen = 23;
+static const size_t CZoneDataBlockChunkMax = 200;
 
 // Pending-ack handling for press/release button pairs (Latching/Toggle Output Function
 // on B&G Vulcan sends a press frame like 0x71 immediately followed by a release frame
@@ -62,6 +93,30 @@ static void LearnCZoneHeader(uint16_t hdr) {
   }
 }
 
+static inline bool IsCZoneAbsOn(uint8_t iState) {
+  return iState == 0xF1 || iState == 0x01 || iState == 0x11;
+}
+
+static inline bool IsCZoneTogglePress(uint8_t iState, uint8_t b7) {
+  return iState >= 0x71 && iState <= 0x7F && b7 == 0x08;
+}
+
+static inline bool IsCZoneToggleRange(uint8_t iState) {
+  return iState >= 0x71 && iState <= 0x7F;
+}
+
+static inline bool IsCZoneToggleRelease(uint8_t iState, uint8_t b7) {
+  return iState == 0x40 && b7 == 0x08;
+}
+
+static inline bool IsCZoneAbsOff(uint8_t iState) {
+  return iState == 0xF2 || iState == 0x41 || iState == 0x40 || iState == 0x00 || iState == 0x10;
+}
+
+static inline bool IsCZoneReleaseFrame(uint8_t iState) {
+  return iState == 0x40 || iState == 0x42 || iState == 0x62;
+}
+
 static void SendCZoneMsgWithMirroredHeader(const tN2kMsg &msg) {
   NMEA2000.SendMsg(msg);
   if (msg.DataLen < 2) return;
@@ -80,7 +135,11 @@ static void SetCZoneSwitchChangeRequest127502_CZ(unsigned char DeviceInstance, u
 static void SetCZoneSwitchChangeAck65283_CZ(unsigned char CzSwitchBankSerialNum);
 static void SetCZoneSwitchHeartbeat65284_CZ(unsigned char CzSwitchBankSerialNum);
 static void SetCZoneSendConfigToMFD65290_CZ(unsigned char CzSwitchBankSerial, uint8_t CZoneConfig0, uint8_t CZoneConfig1, uint8_t CZoneConfig2);
+static void SetCZoneModuleClaim65290_CZ();
 static void SetCZoneSwitchStateBroadcast130817_CZ(unsigned char CzSwitchBankSerialNum);
+static void SetCZoneDataBlockAck65291_CZ(uint8_t target, uint16_t blockIndex, uint8_t status);
+static void CzSendOneBlock(uint16_t blockIdx);
+static void SendCZoneConfigAs130816_CZ();
 static void SyncCZoneStateFromRelays();
 #endif // ENABLE_CZONE
 
@@ -92,8 +151,6 @@ void CZone_Init() {
 
 void CZone_Loop() {
 #if ENABLE_CZONE
-  static unsigned long nextHeartbeat = 0;
-  static unsigned long nextStateBroadcast = 0;
   const unsigned long now = millis();
 
   SyncCZoneStateFromRelays();
@@ -103,20 +160,55 @@ void CZone_Loop() {
   // otherwise the relay state and the MFD display would stay out of sync indefinitely.
   if (CzAckPending && (long)(now - CzAckPendingSince) >= (long)CzAckPendingTimeoutMs) {
     CzAckPending = false;
-    SetCZoneSwitchStateBroadcast130817_CZ(CzSwitchBank1SerialNum);
     SetCZoneSwitchChangeAck65283_CZ(CzSwitchBank1SerialNum);
     SetCZoneSwitchHeartbeat65284_CZ(CzSwitchBank1SerialNum);
   }
 
-  if (!CzAckPending && (long)(now - nextHeartbeat) >= 0) {
-    nextHeartbeat = now + 1000UL;
-    SetCZoneSwitchHeartbeat65284_CZ(CzSwitchBank1SerialNum);
-    SetCZoneSwitchChangeAck65283_CZ(CzSwitchBank1SerialNum);
+  // Only announce config/claim in a short request-triggered window to avoid UI churn on CZ pages.
+  if ((long)(CzAnnounceUntilMs - now) > 0 && (long)(now - CzNextAnnounceMs) >= 0) {
+    CzNextAnnounceMs = now + 2000UL;
+    if ((long)(CzTransferRejectUntilMs - now) <= 0) {
+      SetCZoneSendConfigToMFD65290_CZ(CzSwitchBank1SerialNum, CzConfig0, CzConfig1, CzConfig2);
+    }
+    // Claim only when no local config exists; otherwise Vulcan may re-enter
+    // "Empfange Konfiguration" repeatedly and stick at 0%.
+    if (!LittleFS.exists(CzZcfFinalPath)) {
+      SetCZoneModuleClaim65290_CZ();
+    }
   }
 
-  if (!CzAckPending && (long)(now - nextStateBroadcast) >= 0) {
-    nextStateBroadcast = now + 500UL;
-    SetCZoneSwitchStateBroadcast130817_CZ(CzSwitchBank1SerialNum);
+  if (!CzAllowOutboundConfigTx && CzZcfTxActive) {
+    CzZcfTxActive = false;
+    CzZcfTxRetries = 0;
+    if (N2kDebug) Serial.println("CZone 130816 tx: disabled");
+  }
+
+  // ZCF TX retry: resend current block if Vulcan hasn't ACKed within timeout
+  if (CzZcfTxActive && (long)(now - CzZcfTxLastMs) >= (long)CzZcfTxRetryMs) {
+    CzZcfTxRetries++;
+    if (CzZcfTxRetries > CzZcfTxRetryMax) {
+      if (N2kDebug) Serial.printf("CZone 130816 tx abort: block=%u retries=%u\n",
+                                  (unsigned)CzZcfTxBlock,
+                                  (unsigned)CzZcfTxRetries);
+      CzZcfTxActive = false;
+      CzZcfTxRetries = 0;
+    } else {
+      if (N2kDebug) Serial.printf("CZone 130816 tx retry: block=%u try=%u\n",
+                                  (unsigned)CzZcfTxBlock,
+                                  (unsigned)CzZcfTxRetries);
+      CzSendOneBlock(CzZcfTxBlock);
+    }
+  }
+
+  // Abort stale RX transfers so a half-started upload cannot trap the node in "receiving" mode.
+  if (CzZcfRxActive && (long)(now - CzZcfRxLastMs) >= (long)CzZcfRxTimeoutMs) {
+    if (N2kDebug) {
+      Serial.printf("CZone 130816 rx timeout: nextBlock=%u bytes=%u\n",
+                    (unsigned)CzZcfNextBlock,
+                    (unsigned)CzZcfBytesReceived);
+    }
+    CzZcfRxActive = false;
+    LittleFS.remove(CzZcfTmpPath);
   }
 #endif
 }
@@ -196,11 +288,11 @@ bool CZone_HandleMsg(const tN2kMsg &msg) {
           bool ignoreSwitchCommand = false;
           bool doToggle = false;
           const uint8_t b7 = msg.Data[7];
-          if (iState == 0xF1 || iState == 0x01 || iState == 0x11) {
+          if (IsCZoneAbsOn(iState)) {
             // Common ON encodings seen on CZone pages (Momentary-style absolute ON).
             handleAbs = true;
             absOut = true;
-          } else if (iState >= 0x71 && iState <= 0x7F) {
+          } else if (IsCZoneTogglePress(iState, b7)) {
             // "Single Throw Latching" tap on B&G Vulcan (Output Function "On/Off" or "Toggle"):
             // one tap toggles the relay state. Always paired with b7=0x08 in this mode.
             // Confirmed by log: the MFD alternates between 0x71 and 0x72 as the press code
@@ -211,12 +303,15 @@ bool CZone_HandleMsg(const tN2kMsg &msg) {
             // release frame (0x62 or 0x40 depending on Output Function setting - both
             // handled as ignore below via the b7==0x08 marker).
             doToggle = true;
-          } else if (iState == 0x40 && b7 == 0x08) {
+          } else if (IsCZoneToggleRange(iState)) {
+            // 0x7x without the Latching marker is treated as non-switch traffic.
+            ignoreSwitchCommand = true;
+          } else if (IsCZoneToggleRelease(iState, b7)) {
             // Release frame following 0x71 when Output Function = "Toggle" (b7=0x08 marks
             // this Latching/Toggle frame family). Must be ignored - it is NOT an OFF command,
             // just the button release, otherwise every tap would toggle twice.
             ignoreSwitchCommand = true;
-          } else if (iState == 0xF2 || iState == 0x41 || iState == 0x40 || iState == 0x00 || iState == 0x10) {
+          } else if (IsCZoneAbsOff(iState)) {
             // Common OFF encodings seen on CZone pages (Momentary-style absolute OFF,
             // b7=0x00 frame family - plain "Single Throw Momentary" Output Function).
             // 0x40 here confirmed as the "OFF" button code on B&G Vulcan in Momentary mode
@@ -254,7 +349,7 @@ bool CZone_HandleMsg(const tN2kMsg &msg) {
               iState,
               msg.Data[4],
               msg.Data[5],
-              handleAbs ? "ABS" : (doToggle ? "TOGGLE-LATCH" : "TOGGLE-FALLBACK"),
+              handleAbs ? "ABS" : (doToggle ? "TOGGLE-LATCH" : "IGNORED/OTHER"),
               absOut ? "ON" : "OFF",
               ignoreSwitchCommand ? 1U : 0U);
           }
@@ -263,9 +358,9 @@ bool CZone_HandleMsg(const tN2kMsg &msg) {
             // If we have a pending ack from a preceding press frame, this release frame
             // is the right moment to send it - the MFD has now seen the full press/release
             // cycle and should accept the status update without re-triggering its own toggle.
-            if (CzAckPending) {
+            const bool isReleaseFrame = IsCZoneReleaseFrame(iState);
+            if (isReleaseFrame && CzAckPending) {
               CzAckPending = false;
-              SetCZoneSwitchStateBroadcast130817_CZ(CzSwitchBank1SerialNum);
               SetCZoneSwitchChangeAck65283_CZ(CzSwitchBank1SerialNum);
               SetCZoneSwitchHeartbeat65284_CZ(CzSwitchBank1SerialNum);
             }
@@ -281,8 +376,6 @@ bool CZone_HandleMsg(const tN2kMsg &msg) {
               *syncState &= ~mask;
             }
             SetChangeSwitchState_CZ(switchIndex, absOut);
-            // Send updated state immediately after command
-            SetCZoneSwitchStateBroadcast130817_CZ(CzSwitchBank1SerialNum);
             SetCZoneSwitchChangeAck65283_CZ(CzSwitchBank1SerialNum);
             SetCZoneSwitchHeartbeat65284_CZ(CzSwitchBank1SerialNum);
           } else if (doToggle) {
@@ -291,16 +384,22 @@ bool CZone_HandleMsg(const tN2kMsg &msg) {
             *state ^= mask;
             *syncState ^= mask;
             SetChangeSwitchState_CZ(switchIndex, ((*state & mask) != 0));
+            // Sync to global state variables so the next heartbeat reflects the new state
+            if (switchIndex <= 4) {
+              if ((*state & mask) != 0) CzSwitchState1 |= mask;
+              else CzSwitchState1 &= ~mask;
+              if ((*syncState & mask) != 0) CzMfdDisplaySyncState1 |= mask;
+              else CzMfdDisplaySyncState1 &= ~mask;
+            }
             CzAckPending = true;
             CzAckPendingSince = millis();
           } else {
-            // Fallback for undocumented command states: behave as toggle, ack immediately.
-            *state ^= mask;
-            *syncState ^= mask;
-            SetChangeSwitchState_CZ(switchIndex, ((*state & mask) != 0));
-            SetCZoneSwitchStateBroadcast130817_CZ(CzSwitchBank1SerialNum);
-            SetCZoneSwitchChangeAck65283_CZ(CzSwitchBank1SerialNum);
-            SetCZoneSwitchHeartbeat65284_CZ(CzSwitchBank1SerialNum);
+            // Unsupported/unknown command state: never toggle as fallback.
+            if (N2kDebug) {
+              Serial.printf("CZone 65280 ignore unsupported iState=%02X b7=%02X\n",
+                            iState,
+                            b7);
+            }
           }
           return true;
         }
@@ -314,12 +413,196 @@ bool CZone_HandleMsg(const tN2kMsg &msg) {
         if (hdr != CZoneMessage && hdr != CZoneMessageAlt) return false;
         CzLastRequester = msg.Source;
         LearnCZoneHeader(hdr);
-        idx = 7;
-        if (CzDipSwitch != msg.GetByte(idx)) return false;
-        SetCZoneSendConfigToMFD65290_CZ(CzSwitchBank1SerialNum, CzConfig0, CzConfig1, CzConfig2);
-        SetCZoneSwitchHeartbeat65284_CZ(CzSwitchBank1SerialNum);
-        SetCZoneSwitchStateBroadcast130817_CZ(CzSwitchBank1SerialNum);
-        if (NumberOfSwitches == 8) SetCZoneSendConfigToMFD65290_CZ(CzSwitchBank2SerialNum, CzConfig0, CzConfig1, CzConfig2);
+        if (N2kDebug) {
+          Serial.printf("CZone 65290 rx: b2=%02X b3=%02X b4=%02X b5=%02X b6=%02X b7=%02X\n",
+                        msg.Data[2], msg.Data[3], msg.Data[4], msg.Data[5], msg.Data[6], msg.Data[7]);
+        }
+        // Do not reject 65290 by dip byte; Vulcan variants use different encodings here.
+        // Write-announce frames (seen with b7==0x01) can also appear during startup sync.
+        // Do not auto-start 130816 transfer here, otherwise SR-Aktor jumps into
+        // "Empfange Konfiguration" directly after reboot and can stall at 0%.
+        if (msg.DataLen >= 8 && msg.Data[7] == 0x01) {
+          if (!CzAllowOutboundConfigTx) {
+            CzAnnounceUntilMs = 0;
+            CzTransferRejectUntilMs = millis() + 5000UL;
+            SetCZoneDataBlockAck65291_CZ(CzModuleAddress, 0, 1);
+            if (N2kDebug) Serial.println("CZone 65290 rx: reject config-load request");
+          }
+          // If a local config already exists, avoid prolonged announce traffic.
+          // This reduces CZ-page flapping/empty transitions on Vulcan.
+          if (CzAllowOutboundConfigTx && !LittleFS.exists(CzZcfFinalPath)) {
+            CzAnnounceUntilMs = millis() + 4000UL;
+            CzNextAnnounceMs = 0;
+          } else {
+            CzAnnounceUntilMs = 0;
+          }
+        }
+        CzConfigAuthenticated = true;
+        if ((long)(CzTransferRejectUntilMs - millis()) <= 0) {
+          SetCZoneSendConfigToMFD65290_CZ(CzSwitchBank1SerialNum, CzConfig0, CzConfig1, CzConfig2);
+        }
+        if (NumberOfSwitches == 8 && (long)(CzTransferRejectUntilMs - millis()) <= 0) {
+          SetCZoneSendConfigToMFD65290_CZ(CzSwitchBank2SerialNum, CzConfig0, CzConfig1, CzConfig2);
+        }
+        return true;
+      }
+      break;
+
+    case 130816UL: // ZCF datablock transfer (fast packet assembled by NMEA2000 lib)
+      {
+        if (msg.DataLen < CZoneDataBlockHeaderLen) return true;
+        int idx = 0;
+        const uint16_t hdr = msg.Get2ByteUInt(idx);
+        if (hdr != CZoneMessage && hdr != CZoneMessageAlt) return false;
+        CzLastRequester = msg.Source;
+        LearnCZoneHeader(hdr);
+
+        int blockIdxPos = 2;
+        const uint16_t blockIndex = msg.Get2ByteUInt(blockIdxPos);
+        // Vulcan 130816 payload does not carry a simple dip/target byte at a fixed offset
+        // in our observed traces, so do not filter by a guessed target field.
+        // Use bank serial byte (b5) as ACK target when available.
+        uint8_t target = CzModuleAddress;
+        if (msg.DataLen > 5) {
+          target = msg.Data[5];
+        }
+
+        const size_t chunkLen = (msg.DataLen > CZoneDataBlockHeaderLen) ? (msg.DataLen - CZoneDataBlockHeaderLen) : 0;
+        if (N2kDebug) {
+          Serial.printf("CZone 130816 rx: block=%u len=%u b4=%02X b5=%02X\n",
+                        (unsigned)blockIndex,
+                        (unsigned)chunkLen,
+                        msg.Data[4],
+                        msg.Data[5]);
+        }
+        if (chunkLen > CZoneDataBlockChunkMax) {
+          SetCZoneDataBlockAck65291_CZ(target, blockIndex, 1);
+          return true;
+        }
+
+        if (!CzZcfRxActive) {
+          // Keep normal operation stable once a local config exists: reject unsolicited
+          // upload starts instead of entering a potentially endless 0% receive state.
+          if (LittleFS.exists(CzZcfFinalPath)) {
+            SetCZoneDataBlockAck65291_CZ(target, blockIndex, 1);
+            if (N2kDebug) {
+              Serial.printf("CZone 130816 rx: reject block=%u (config already present)\n",
+                            (unsigned)blockIndex);
+            }
+            return true;
+          }
+          if (blockIndex != 0) {
+            if (chunkLen == 0) SetCZoneDataBlockAck65291_CZ(target, blockIndex, 0);
+            return true;
+          }
+          LittleFS.remove(CzZcfTmpPath);
+          CzZcfRxActive = true;
+          CzZcfNextBlock = 0;
+          CzZcfBytesReceived = 0;
+          CzZcfRxLastMs = millis();
+        }
+
+        if (blockIndex < CzZcfNextBlock) {
+          SetCZoneDataBlockAck65291_CZ(target, blockIndex, 0);
+          return true;
+        }
+        if (blockIndex > CzZcfNextBlock) {
+          return true;
+        }
+
+        if (chunkLen > 0) {
+          File wf = LittleFS.open(CzZcfTmpPath, "a");
+          if (!wf) {
+            SetCZoneDataBlockAck65291_CZ(target, blockIndex, 2);
+            CzZcfRxActive = false;
+            return true;
+          }
+          for (size_t i = 0; i < chunkLen; i++) {
+            int payloadIdx = (int)(CZoneDataBlockHeaderLen + i);
+            wf.write(msg.GetByte(payloadIdx));
+          }
+          wf.close();
+          CzZcfBytesReceived += chunkLen;
+          CzZcfRxLastMs = millis();
+        }
+
+        SetCZoneDataBlockAck65291_CZ(target, blockIndex, 0);
+        CzZcfNextBlock++;
+
+        if (chunkLen < CZoneDataBlockChunkMax) {
+          LittleFS.remove(CzZcfFinalPath);
+          if (!LittleFS.rename(CzZcfTmpPath, CzZcfFinalPath)) {
+            if (N2kDebug) Serial.println("CZone 130816: commit rename failed");
+          }
+          if (N2kDebug) Serial.printf("CZone 130816: RX done bytes=%u blocks=%u\n", (unsigned)CzZcfBytesReceived, (unsigned)CzZcfNextBlock);
+          CzZcfRxActive = false;
+        }
+
+        return true;
+      }
+      break;
+
+    case 130822UL: // Vulcan requests config transfer details/chunks
+      {
+        if (msg.DataLen < 6) return true;
+        int idx = 0;
+        const uint16_t hdr = msg.Get2ByteUInt(idx);
+        if (hdr != CZoneMessage && hdr != CZoneMessageAlt) return false;
+        CzLastRequester = msg.Source;
+        LearnCZoneHeader(hdr);
+        if (N2kDebug) {
+          Serial.printf("CZone 130822 rx: b2=%02X b3=%02X b4=%02X b5=%02X b6=%02X\n",
+                        msg.Data[2], msg.Data[3], msg.Data[4], msg.Data[5], msg.Data[6]);
+        }
+        const unsigned long now = millis();
+        if (CzAllowOutboundConfigTx && now >= CzTransferStartMinUptimeMs) {
+          CzAnnounceUntilMs = now + 4000UL;
+          CzNextAnnounceMs = 0;
+          SendCZoneConfigAs130816_CZ();
+        } else {
+          // Vulcan can repeatedly request transfer chunks (130822). If outbound TX is
+          // disabled, actively NACK to avoid staying in "Empfang ... 0%".
+          uint16_t requestedBlock = 0;
+          if (msg.DataLen >= 13) {
+            // Observed 130822 layout carries requested block near the end (b11/b12).
+            requestedBlock = (uint16_t)msg.Data[11] | ((uint16_t)msg.Data[12] << 8);
+          } else if (msg.DataLen >= 7) {
+            requestedBlock = (uint16_t)msg.Data[5] | ((uint16_t)msg.Data[6] << 8);
+          }
+          if ((long)(now - CzLastTxRejectMs) >= (long)CzTxRejectCooldownMs) {
+            CzLastTxRejectMs = now;
+            SetCZoneDataBlockAck65291_CZ(CzModuleAddress, requestedBlock, 1);
+          }
+          if (N2kDebug) {
+            Serial.printf("CZone 130822 rx: reject tx trigger, block=%u uptime=%lu ms\n",
+                          (unsigned)requestedBlock,
+                          now);
+          }
+        }
+        return true;
+      }
+      break;
+
+    case 65291UL: // ACK from Vulcan for our outgoing 130816 block
+      {
+        if (!CzZcfTxActive) return true;
+        if (msg.DataLen < 7) return true;
+        int idx = 0;
+        const uint16_t hdr = msg.Get2ByteUInt(idx);
+        if (hdr != CZoneMessage && hdr != CZoneMessageAlt) return false;
+        // Format: hdr(2) + target(1) + status(1) + blockIndex(2) + ...
+        const uint8_t status = msg.Data[3];
+        int bidx = 4;
+        const uint16_t ackedBlock = msg.Get2ByteUInt(bidx);
+        if (N2kDebug) {
+          Serial.printf("CZone 65291 rx: ackedBlock=%u status=%u\n",
+                        (unsigned)ackedBlock, (unsigned)status);
+        }
+        if (status == 0 && ackedBlock == CzZcfTxBlock) {
+          CzZcfTxRetries = 0;
+          CzZcfTxBlock++;
+          CzSendOneBlock(CzZcfTxBlock);
+        }
         return true;
       }
       break;
@@ -346,10 +629,16 @@ bool CZone_HandleMsg(const tN2kMsg &msg) {
         CzLastRequester = msg.Source;
         LearnCZoneHeader(hdr);
         CzConfigAuthenticated = true;
-        SetCZoneSendConfigToMFD65290_CZ(CzSwitchBank1SerialNum, CzConfig0, CzConfig1, CzConfig2);
-        SetCZoneSwitchHeartbeat65284_CZ(CzSwitchBank1SerialNum);
-        SetCZoneSwitchChangeAck65283_CZ(CzSwitchBank1SerialNum);
-        SetCZoneSwitchStateBroadcast130817_CZ(CzSwitchBank1SerialNum);
+        const unsigned long now = millis();
+        const bool stateChanged =
+          (CzSwitchState1 != CzLastReportedState1) ||
+          (CzSwitchState2 != CzLastReportedState2);
+        const bool keepaliveDue =
+          (long)(now - CzLast65288ResponseMs) >= (long)Cz65288ResponseMinIntervalMs;
+        if (stateChanged || keepaliveDue) {
+          CzLast65288ResponseMs = now;
+          SetCZoneSwitchHeartbeat65284_CZ(CzSwitchBank1SerialNum);
+        }
         return true;
       }
       break;
@@ -391,9 +680,6 @@ static void SetChangeSwitchState_CZ(uint8_t SwitchIndex, bool ItemStatus) {
   if (millis() > BootBlockUntil) {
     SetCZoneSwitchState127501_CZ(BinaryDeviceInstance);
     SetCZoneSwitchChangeRequest127502_CZ(SwitchBankInstance, SwitchIndex, ItemStatus);
-    SetCZoneSwitchChangeAck65283_CZ(CzSwitchBank1SerialNum);
-    SetCZoneSwitchHeartbeat65284_CZ(CzSwitchBank1SerialNum);
-    SetCZoneSwitchStateBroadcast130817_CZ(CzSwitchBank1SerialNum);
   }
 }
 
@@ -437,7 +723,7 @@ static void SetCZoneSwitchChangeAck65283_CZ(unsigned char CzSwitchBankSerialNum)
     CzMfdDisplaySyncState2);
   N2kMsg.SetPGN(65283L);
   N2kMsg.Priority = 7;
-  N2kMsg.Destination = GetCZoneReplyDestination();
+  N2kMsg.Destination = 255;
   N2kMsg.Add2ByteUInt(CzTxHeader);
   N2kMsg.AddByte(CzSwitchBankSerialNum);
   if (CzSwitchBankSerialNum == CzSwitchBank1SerialNum) N2kMsg.AddByte(CzMfdDisplaySyncState1);
@@ -456,16 +742,20 @@ static void SetCZoneSwitchHeartbeat65284_CZ(unsigned char CzSwitchBankSerialNum)
     CzSwitchState2);
   N2kMsg.SetPGN(65284L);
   N2kMsg.Priority = 7;
-  N2kMsg.Destination = GetCZoneReplyDestination();
   N2kMsg.Add2ByteUInt(CzTxHeader);
+  N2kMsg.Destination = 255;
   N2kMsg.AddByte(CzSwitchBankSerialNum);
-  N2kMsg.AddByte(0x0f);
+  // Switch summary field identifier (Contact 6 Plus / N2kCZone parser): 0x1E
+  N2kMsg.AddByte(0x1e);
   if (CzSwitchBankSerialNum == CzSwitchBank1SerialNum)
     N2kMsg.AddByte(CzSwitchState1);
   else N2kMsg.AddByte(CzSwitchState2);
   N2kMsg.Add2ByteUInt(0x0000);
   N2kMsg.AddByte(0x00);
   SendCZoneMsgWithMirroredHeader(N2kMsg);
+
+  if (CzSwitchBankSerialNum == CzSwitchBank1SerialNum) CzLastReportedState1 = CzSwitchState1;
+  else CzLastReportedState2 = CzSwitchState2;
 }
 
 static void SetCZoneSendConfigToMFD65290_CZ(unsigned char CzSwitchBankSerial, uint8_t CZoneConfig0, uint8_t CZoneConfig1, uint8_t CZoneConfig2) {
@@ -489,6 +779,24 @@ static void SetCZoneSendConfigToMFD65290_CZ(unsigned char CzSwitchBankSerial, ui
   SendCZoneMsgWithMirroredHeader(N2kMsg);
 }
 
+static void SetCZoneModuleClaim65290_CZ() {
+  tN2kMsg N2kMsg;
+  N2kMsg.SetPGN(65290L);
+  N2kMsg.Priority = 7;
+  N2kMsg.Destination = 255;
+  N2kMsg.Add2ByteUInt(CzTxHeader);
+  // 0x03 is the claim style used by CZone modules during config transfer arbitration.
+  N2kMsg.AddByte(0x03);
+  // Keep config-id simple/non-zero so requester treats us as a valid claimant.
+  N2kMsg.Add4ByteUInt(0x00000001UL);
+  N2kMsg.AddByte(CzModuleAddress);
+  N2kMsg.AddByte(0xFF);
+  if (N2kDebug) {
+    Serial.printf("CZone TX 65290 module-claim: dip=%u\n", (unsigned)CzModuleAddress);
+  }
+  SendCZoneMsgWithMirroredHeader(N2kMsg);
+}
+
 static void SetCZoneSwitchStateBroadcast130817_CZ(unsigned char CzSwitchBankSerialNum) {
   tN2kMsg N2kMsg;
   if (N2kDebug) Serial.printf("CZone TX 130817 bank=%u state1=%02X state2=%02X\n",
@@ -498,7 +806,7 @@ static void SetCZoneSwitchStateBroadcast130817_CZ(unsigned char CzSwitchBankSeri
   N2kMsg.SetPGN(130817L);
   N2kMsg.Priority = 7;
   N2kMsg.Add2ByteUInt(CzTxHeader);
-  N2kMsg.Destination = GetCZoneReplyDestination();
+  N2kMsg.Destination = 255;
   N2kMsg.AddByte(0x01);
   if (CzSwitchBankSerialNum == CzSwitchBank1SerialNum) {
     N2kMsg.AddByte(CzSwitchBank1SerialNum);
@@ -518,5 +826,88 @@ static void SetCZoneSwitchStateBroadcast130817_CZ(unsigned char CzSwitchBankSeri
   N2kMsg.Add3ByteInt(0);
   N2kMsg.Add3ByteInt(0);
   SendCZoneMsgWithMirroredHeader(N2kMsg);
+}
+
+static void SetCZoneDataBlockAck65291_CZ(uint8_t target, uint16_t blockIndex, uint8_t status) {
+  tN2kMsg N2kMsg;
+  N2kMsg.SetPGN(65291L);
+  N2kMsg.Priority = 7;
+  N2kMsg.Destination = GetCZoneReplyDestination();
+  N2kMsg.Add2ByteUInt(CzTxHeader);
+  N2kMsg.AddByte(target);
+  N2kMsg.AddByte(status);
+  N2kMsg.Add2ByteUInt(blockIndex);
+  N2kMsg.AddByte(CzModuleAddress);
+  N2kMsg.AddByte(0xFF);
+  if (N2kDebug) {
+    Serial.printf("CZone TX 65291 ack: target=%u block=%u status=%u\n",
+                  (unsigned)target, (unsigned)blockIndex, (unsigned)status);
+  }
+  SendCZoneMsgWithMirroredHeader(N2kMsg);
+}
+
+static void CzSendOneBlock(uint16_t blockIdx) {
+  File rf = LittleFS.open(CzZcfFinalPath, "r");
+  if (!rf) {
+    if (N2kDebug) Serial.println("CZone TX: open failed");
+    CzZcfTxActive = false;
+    return;
+  }
+  const size_t fileSize = (size_t)rf.size();
+  const size_t offset = (size_t)blockIdx * CZoneDataBlockChunkMax;
+  if (offset >= fileSize) {
+    rf.close();
+    if (N2kDebug) Serial.printf("CZone 130816 tx done: %u blocks\n", (unsigned)blockIdx);
+    CzZcfTxActive = false;
+    return;
+  }
+  rf.seek(offset);
+  uint8_t chunk[CZoneDataBlockChunkMax];
+  const size_t n = rf.read(chunk, CZoneDataBlockChunkMax);
+  rf.close();
+  if (n == 0) { CzZcfTxActive = false; return; }
+
+  tN2kMsg out;
+  out.SetPGN(130816L);
+  out.Priority = 7;
+  out.Destination = 255; // broadcast
+  out.Add2ByteUInt(CzTxHeader);
+  out.Add2ByteUInt(blockIdx);
+  out.AddByte(0x00);
+  out.AddByte(CzModuleAddress);
+  for (int i = 0; i < (int)(CZoneDataBlockHeaderLen - 4) - 2; i++) out.AddByte(0xFF);
+  for (size_t i = 0; i < n; i++) out.AddByte(chunk[i]);
+  NMEA2000.SendMsg(out);
+  CzZcfTxLastMs = millis();
+  if (N2kDebug) {
+    Serial.printf("CZone 130816 tx: block=%u bytes=%u%s\n",
+                  (unsigned)blockIdx, (unsigned)n,
+                  (n < CZoneDataBlockChunkMax) ? " [last]" : "");
+  }
+}
+
+static void SendCZoneConfigAs130816_CZ() {
+  if (!CzAllowOutboundConfigTx) {
+    CzZcfTxActive = false;
+    CzZcfTxRetries = 0;
+    return;
+  }
+  const unsigned long now = millis();
+  if ((long)(now - CzLastConfigPushMs) < (long)CzConfigPushCooldownMs) {
+    return;
+  }
+  CzLastConfigPushMs = now;
+  if (!LittleFS.exists(CzZcfFinalPath)) {
+    if (N2kDebug) Serial.println("CZone 130816 tx: no /config.zcf");
+    return;
+  }
+  if (CzZcfTxActive) {
+    if (N2kDebug) Serial.println("CZone 130816 tx: reset active transfer");
+  }
+  CzZcfTxActive = true;
+  CzZcfTxBlock = 0;
+  CzZcfTxRetries = 0;
+  if (N2kDebug) Serial.println("CZone 130816 tx: start block 0");
+  CzSendOneBlock(0);
 }
 #endif // ENABLE_CZONE

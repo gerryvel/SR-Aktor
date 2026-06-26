@@ -14,7 +14,7 @@
 #include <Preferences.h>
 
 // Versionierung
-#define VersionSoftware "1.0.1.0 (2025-10-11)"  // Version Software
+#define VersionSoftware "1.3.1.0 (2026-06-26)"  // Version Software
 #define VersionHardware "1.1.0.0 (2025-08-07)"  // Version Hardware
 
 /**
@@ -40,7 +40,8 @@
 #define BatteryDCStatusSendOffset 160
 #define SlowDataUpdatePeriod 1000  // Time between CAN Messages sent
 // NMEA2000 item index for the third relay on PGN127501/127502.
-// Set to 3 for standard mapping, set to 5 for MFD profiles expecting 0.5.
+// Vulcan CZone 6.11.8.0 only showed all three relays reliably when relay 3
+// stayed on item 3 and slot 4 was still sent as an explicit unavailable slot.
 #define N2K_THIRD_SWITCH_ITEM 3
 
 // Configuration Website
