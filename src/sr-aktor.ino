@@ -391,20 +391,33 @@ void CheckSourceAddressChange() {
 /************************************ Loop ***********************************/
 void loop() {
   static unsigned long lastSwitchControlAnnounce = 0;
+  static int8_t lastCtrlR1 = -1;
+  static int8_t lastCtrlR2 = -1;
+  static int8_t lastCtrlR3 = -1;
 
   SendN2kSwitchBankStatus(Rel1Status, Rel2Status, Rel3Status);
 
-  // Compatibility: periodically announce full switch control bank (PGN127502)
-  // so MFDs can build a full switch list reliably.
-  if (millis() - lastSwitchControlAnnounce >= 1000UL) {
+  // Compatibility: announce PGN127502 only on state changes plus sparse keepalive.
+  // Sending command PGN cyclically can create feedback loops on some MFDs.
+  const bool r1Now = GetRelayLogicalState(0);
+  const bool r2Now = GetRelayLogicalState(1);
+  const bool r3Now = GetRelayLogicalState(2);
+  const bool ctrlStateChanged =
+    (lastCtrlR1 < 0) ||
+    (lastCtrlR1 != (int8_t)(r1Now ? 1 : 0)) ||
+    (lastCtrlR2 != (int8_t)(r2Now ? 1 : 0)) ||
+    (lastCtrlR3 != (int8_t)(r3Now ? 1 : 0));
+  const bool ctrlKeepaliveDue = (millis() - lastSwitchControlAnnounce) >= 15000UL;
+
+  if (ctrlStateChanged || ctrlKeepaliveDue) {
     tN2kBinaryStatus controlBankStatus;
     tN2kMsg controlMsg;
 
     lastSwitchControlAnnounce = millis();
 
-    Rel1Status = GetRelayLogicalState(0);
-    Rel2Status = GetRelayLogicalState(1);
-    Rel3Status = GetRelayLogicalState(2);
+    Rel1Status = r1Now;
+    Rel2Status = r2Now;
+    Rel3Status = r3Now;
 
     N2kResetBinaryStatus(controlBankStatus);
     N2kSetStatusBinaryOnStatus(controlBankStatus, Rel1Status ? N2kOnOff_On : N2kOnOff_Off, 1);
@@ -414,6 +427,10 @@ void loop() {
 
     SetN2kSwitchBankCommand(controlMsg, 0, controlBankStatus);
     NMEA2000.SendMsg(controlMsg);
+
+    lastCtrlR1 = Rel1Status ? 1 : 0;
+    lastCtrlR2 = Rel2Status ? 1 : 0;
+    lastCtrlR3 = Rel3Status ? 1 : 0;
   }
 
   NMEA2000.ParseMessages();
