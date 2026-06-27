@@ -53,6 +53,14 @@ I use an B&G Vulcan 7 with Czone Support, after import the file:
 
 Configure Czone file with the CZone Configuration tool V 6.29.22
 
+
+## Fotos
+
+<img width="3352" height="2514" alt="image" src="https://github.com/user-attachments/assets/a5b8efa3-24ca-4abd-9930-b539286fe897" />
+<img width="3112" height="2334" alt="image" src="https://github.com/user-attachments/assets/78da20bb-83be-4fe8-b66e-79c5e62ce1df" />
+<img width="3182" height="2386" alt="image" src="https://github.com/user-attachments/assets/0c44bf86-26db-4732-89d0-4826e31e96f0" />
+
+
 ## Changes
 
 - Version 1.3.2 CZone funtion with B&G Vulcan okay
