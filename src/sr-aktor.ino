@@ -311,12 +311,15 @@ void SendN2kSwitchBankStatus(bool Status1, bool Status2, bool Status3) {
     const bool report2 = InvertN2kStatus ? !Status2 : Status2;
     const bool report3 = InvertN2kStatus ? !Status3 : Status3;
 
-    // Vulcan 6.11.8.0 needs an explicit empty slot 4, otherwise the third relay
-    // disappears from the standard device list even though item 3 is populated.
+    // Build full bank status and place relay 3 on configured item index.
     N2kSetStatusBinaryOnStatus(bankStatus, report1 ? N2kOnOff_On : N2kOnOff_Off, 1);
     N2kSetStatusBinaryOnStatus(bankStatus, report2 ? N2kOnOff_On : N2kOnOff_Off, 2);
     N2kSetStatusBinaryOnStatus(bankStatus, report3 ? N2kOnOff_On : N2kOnOff_Off, N2K_THIRD_SWITCH_ITEM);
-    N2kSetStatusBinaryOnStatus(bankStatus, N2kOnOff_Unavailable, 4);
+    // Explicitly set a 4th item (always Off) - the Vulcan device manager seems to only
+    // render switch banks whose items are explicitly On/Off rather than left as the
+    // default "Unavailable" state. Confirmed previously: a 4th explicit item made
+    // item 4 appear as "0.4" in the device manager.
+    N2kSetStatusBinaryOnStatus(bankStatus, N2kOnOff_Off, 4);
     SetN2kPGN127501(N2kMsg, 0, bankStatus);
 
         // Diagnostic: print message bytes only when N2kDebug is enabled.
@@ -391,48 +394,30 @@ void CheckSourceAddressChange() {
 }
 /************************************ Loop ***********************************/
 void loop() {
-
   static unsigned long lastSwitchControlAnnounce = 0;
-  static int8_t lastCtrlR1 = -1;
-  static int8_t lastCtrlR2 = -1;
-  static int8_t lastCtrlR3 = -1;
 
   SendN2kSwitchBankStatus(Rel1Status, Rel2Status, Rel3Status);
 
-  // Compatibility: announce PGN127502 only on state changes plus sparse keepalive.
-  // Sending command PGN cyclically can create feedback loops on some MFDs.
-  const bool r1Now = GetRelayLogicalState(0);
-  const bool r2Now = GetRelayLogicalState(1);
-  const bool r3Now = GetRelayLogicalState(2);
-  const bool ctrlStateChanged =
-    (lastCtrlR1 < 0) ||
-    (lastCtrlR1 != (int8_t)(r1Now ? 1 : 0)) ||
-    (lastCtrlR2 != (int8_t)(r2Now ? 1 : 0)) ||
-    (lastCtrlR3 != (int8_t)(r3Now ? 1 : 0));
-  const bool ctrlKeepaliveDue = (millis() - lastSwitchControlAnnounce) >= 15000UL;
-
-  if (ctrlStateChanged || ctrlKeepaliveDue) {
+  // Compatibility: periodically announce full switch control bank (PGN127502)
+  // so MFDs can build a full switch list reliably.
+  if (millis() - lastSwitchControlAnnounce >= 1000UL) {
     tN2kBinaryStatus controlBankStatus;
     tN2kMsg controlMsg;
 
     lastSwitchControlAnnounce = millis();
 
-    Rel1Status = r1Now;
-    Rel2Status = r2Now;
-    Rel3Status = r3Now;
+    Rel1Status = GetRelayLogicalState(0);
+    Rel2Status = GetRelayLogicalState(1);
+    Rel3Status = GetRelayLogicalState(2);
 
     N2kResetBinaryStatus(controlBankStatus);
     N2kSetStatusBinaryOnStatus(controlBankStatus, Rel1Status ? N2kOnOff_On : N2kOnOff_Off, 1);
     N2kSetStatusBinaryOnStatus(controlBankStatus, Rel2Status ? N2kOnOff_On : N2kOnOff_Off, 2);
     N2kSetStatusBinaryOnStatus(controlBankStatus, Rel3Status ? N2kOnOff_On : N2kOnOff_Off, N2K_THIRD_SWITCH_ITEM);
-    N2kSetStatusBinaryOnStatus(controlBankStatus, N2kOnOff_Unavailable, 4);
+    N2kSetStatusBinaryOnStatus(controlBankStatus, N2kOnOff_Off, 4);
 
     SetN2kSwitchBankCommand(controlMsg, 0, controlBankStatus);
     NMEA2000.SendMsg(controlMsg);
-
-    lastCtrlR1 = Rel1Status ? 1 : 0;
-    lastCtrlR2 = Rel2Status ? 1 : 0;
-    lastCtrlR3 = Rel3Status ? 1 : 0;
   }
 
   NMEA2000.ParseMessages();
