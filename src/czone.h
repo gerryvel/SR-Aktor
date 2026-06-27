@@ -8,6 +8,9 @@
 #include <Arduino.h>
 #include <N2kMessages.h>
 
+// Initialize CZone module (optional)
+void CZone_Init();
+
 // Periodic CZone housekeeping (heartbeat/state broadcast)
 void CZone_Loop();
 

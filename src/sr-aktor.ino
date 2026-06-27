@@ -16,8 +16,8 @@
  * @file sr-aktor.ino
  * @author Gerry Sebb
  * @brief Binary Switch NMEA2000
- * @version 1.3.2.0
- * @date 2026-06-26
+ * @version 1.0
+ * @date 2026-06-27
  * 
  * @copyright Copyright (c) 2025
  * 
@@ -92,10 +92,11 @@ void HandleNMEA2000Msg(const tN2kMsg &N2kMsg) {
         tN2kOnOff s1 = N2kGetStatusOnBinaryStatus(BankStatus, 1);
         tN2kOnOff s2 = N2kGetStatusOnBinaryStatus(BankStatus, 2);
       tN2kOnOff s3 = N2kGetStatusOnBinaryStatus(BankStatus, N2K_THIRD_SWITCH_ITEM);
+      tN2kOnOff s3Legacy = N2kGetStatusOnBinaryStatus(BankStatus, 3);
 
         bool on1 = (s1 == N2kOnOff_On);
         bool on2 = (s2 == N2kOnOff_On);
-      bool on3 = (s3 == N2kOnOff_On);
+      bool on3 = (s3 == N2kOnOff_On) || (s3Legacy == N2kOnOff_On);
 
         digitalWrite(Relais[0], on1 ? HIGH : LOW);
         digitalWrite(Relais[1], on2 ? HIGH : LOW);
@@ -232,6 +233,7 @@ void setup() {
   
 // Init NMEA2000
   initNMEA2000();
+  CZone_Init();
 
   // Register incoming NMEA2000 message handler so we can react to remote commands
   NMEA2000.SetMsgHandler(HandleNMEA2000Msg);
@@ -310,11 +312,13 @@ void SendN2kSwitchBankStatus(bool Status1, bool Status2, bool Status3) {
     const bool report2 = InvertN2kStatus ? !Status2 : Status2;
     const bool report3 = InvertN2kStatus ? !Status3 : Status3;
 
-    // Build full bank status and keep a deliberate empty slot 4 for Vulcan compatibility.
+    // Build full bank status and keep one deliberate empty slot for Vulcan compatibility.
+    // If relay 3 is mapped to slot 4, keep slot 3 empty instead.
+    const uint8_t placeholderSlot = (N2K_THIRD_SWITCH_ITEM == 4) ? 3 : 4;
     N2kSetStatusBinaryOnStatus(bankStatus, report1 ? N2kOnOff_On : N2kOnOff_Off, 1);
     N2kSetStatusBinaryOnStatus(bankStatus, report2 ? N2kOnOff_On : N2kOnOff_Off, 2);
     N2kSetStatusBinaryOnStatus(bankStatus, report3 ? N2kOnOff_On : N2kOnOff_Off, N2K_THIRD_SWITCH_ITEM);
-    N2kSetStatusBinaryOnStatus(bankStatus, N2kOnOff_Unavailable, 4);
+    N2kSetStatusBinaryOnStatus(bankStatus, N2kOnOff_Unavailable, placeholderSlot);
     SetN2kPGN127501(N2kMsg, 0, bankStatus);
 
         // Diagnostic: print message bytes only when N2kDebug is enabled.
@@ -390,29 +394,46 @@ void CheckSourceAddressChange() {
 /************************************ Loop ***********************************/
 void loop() {
   static unsigned long lastSwitchControlAnnounce = 0;
+  static int8_t lastCtrlR1 = -1;
+  static int8_t lastCtrlR2 = -1;
+  static int8_t lastCtrlR3 = -1;
 
   SendN2kSwitchBankStatus(Rel1Status, Rel2Status, Rel3Status);
 
-  // Compatibility: periodically announce full switch control bank (PGN127502)
-  // so MFDs can build a full switch list reliably.
-  if (millis() - lastSwitchControlAnnounce >= 1000UL) {
+  // Compatibility: announce PGN127502 only on state changes plus sparse keepalive.
+  // Sending command PGN cyclically can create feedback loops on some MFDs.
+  const bool r1Now = GetRelayLogicalState(0);
+  const bool r2Now = GetRelayLogicalState(1);
+  const bool r3Now = GetRelayLogicalState(2);
+  const bool ctrlStateChanged =
+    (lastCtrlR1 < 0) ||
+    (lastCtrlR1 != (int8_t)(r1Now ? 1 : 0)) ||
+    (lastCtrlR2 != (int8_t)(r2Now ? 1 : 0)) ||
+    (lastCtrlR3 != (int8_t)(r3Now ? 1 : 0));
+
+  if (ctrlStateChanged) {
     tN2kBinaryStatus controlBankStatus;
     tN2kMsg controlMsg;
 
     lastSwitchControlAnnounce = millis();
 
-    Rel1Status = GetRelayLogicalState(0);
-    Rel2Status = GetRelayLogicalState(1);
-    Rel3Status = GetRelayLogicalState(2);
+    Rel1Status = r1Now;
+    Rel2Status = r2Now;
+    Rel3Status = r3Now;
 
     N2kResetBinaryStatus(controlBankStatus);
+    const uint8_t placeholderSlot = (N2K_THIRD_SWITCH_ITEM == 4) ? 3 : 4;
     N2kSetStatusBinaryOnStatus(controlBankStatus, Rel1Status ? N2kOnOff_On : N2kOnOff_Off, 1);
     N2kSetStatusBinaryOnStatus(controlBankStatus, Rel2Status ? N2kOnOff_On : N2kOnOff_Off, 2);
     N2kSetStatusBinaryOnStatus(controlBankStatus, Rel3Status ? N2kOnOff_On : N2kOnOff_Off, N2K_THIRD_SWITCH_ITEM);
-    N2kSetStatusBinaryOnStatus(controlBankStatus, N2kOnOff_Unavailable, 4);
+    N2kSetStatusBinaryOnStatus(controlBankStatus, N2kOnOff_Unavailable, placeholderSlot);
 
     SetN2kSwitchBankCommand(controlMsg, 0, controlBankStatus);
     NMEA2000.SendMsg(controlMsg);
+
+    lastCtrlR1 = Rel1Status ? 1 : 0;
+    lastCtrlR2 = Rel2Status ? 1 : 0;
+    lastCtrlR3 = Rel3Status ? 1 : 0;
   }
 
   NMEA2000.ParseMessages();

@@ -6,12 +6,18 @@
 [![OBP](https://img.shields.io/badge/Sailing_with-OpenBoatsProjects-blue)](https://open-boat-projects.org/de/)
 
 ## Description
-This repository shows how to switch relais from Chartplotter with CZone Support 
+This repository shows how to switch 3 relais from Chartplotter with CZone Support and also with the website support.
 - Switching Relais Aktor
 
 and send it as NNMEA2000 meassage.
 - PGN 127501 // Binary Status Report
-- PGN 127502 // Binary Switch Control  
+- PGN 127502 // Binary Switch Control 
+- PGN 126208 // Switch Control for B&G
+- PGN 130817 
+- PGN 65283
+- PGN 65284
+- PGN 65288
+- PGN 65290 CZone  
 
 In addition, all data and part of the configuration are displayed as a website. 
 
@@ -45,11 +51,9 @@ PCB by Aisler: [Link](https://aisler.net/p/OFGLZJKF)
 
 I use an B&G Vulcan 7 with Czone Support, after import the file:
 
-![vulcan_v7_control](https://github.com/user-attachments/assets/014ecccb-5900-4c55-aafc-dfafc79efb1c)
-
-Configure Czone file from the [Yacht Device Website](https://www.yachtd.com/products/ds/?czone)
+Configure Czone file with the CZone Configuration tool V 6.29.22
 
 ## Changes
 
-- Todo: Function with MFD Control
+- Version 1.3.2 CZone funtion with B&G Vulcan okay
 - Version 1.0 Function with Website control, Monitor on NMEA200 okay (PGN127501)
