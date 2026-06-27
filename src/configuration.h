@@ -4,9 +4,9 @@
 /**
  * @file configuration.h
  * @author Gerry Sebb
- * @brief Konfiguration für GPIO und Variable
+ * @brief Konfiguration fÃ¼r GPIO und Variable
  * @version 2.3
- * @date 2026-07-26
+ * @date 2025-01-06
  */
 
 // Core Arduino includes (provides String, IPAddress, uint8_t, etc.)
@@ -40,7 +40,8 @@
 #define BatteryDCStatusSendOffset 160
 #define SlowDataUpdatePeriod 1000  // Time between CAN Messages sent
 // NMEA2000 item index for the third relay on PGN127501/127502.
-// Standard item index for the third relay on PGN127501/127502.
+// Vulcan CZone 6.11.8.0 only showed all three relays reliably when relay 3
+// stayed on item 3 and slot 4 was still sent as an explicit unavailable slot.
 #define N2K_THIRD_SWITCH_ITEM 3
 
 // Configuration Website

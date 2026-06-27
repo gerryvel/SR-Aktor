@@ -62,7 +62,7 @@ static unsigned long CzLast65288ResponseMs = 0;
 static const unsigned long Cz65288ResponseMinIntervalMs = 15000;
 static uint8_t CzLastReportedState1 = 0xFF;
 static uint8_t CzLastReportedState2 = 0xFF;
-// ZCF TX state machine (module → MFD block-by-block)
+// ZCF TX state machine (module â†’ MFD block-by-block)
 static bool CzZcfTxActive = false;
 static uint16_t CzZcfTxBlock = 0;
 static unsigned long CzZcfTxLastMs = 0;
