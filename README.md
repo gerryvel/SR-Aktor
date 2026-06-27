@@ -19,7 +19,7 @@ and send it as NNMEA2000 meassage.
 - PGN 65288
 - PGN 65290 CZone  
 
-In addition, all data and part of the configuration are displayed as a website. 
+In addition, the operation of the relays, data and settings can be accessed via the website.
 
 ## Based on the work of
 
