@@ -82,6 +82,24 @@ static const size_t CZoneDataBlockChunkMax = 200;
 static bool CzAckPending = false;
 static unsigned long CzAckPendingSince = 0;
 static const unsigned long CzAckPendingTimeoutMs = 400;
+static bool CzBankSerialLocked = false;
+static bool CzToggleAwaitRelease[8] = {false, false, false, false, false, false, false, false};
+static uint8_t CzAckPendingSwitchIdx = 0xFF;
+static uint8_t CzActiveToggleSource = 0xFF;
+static unsigned long CzActiveToggleSourceLastMs = 0;
+static const unsigned long CzToggleSourceSessionTimeoutMs = 5000;
+static unsigned long CzLastTogglePressMs[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+static uint8_t CzLastTogglePressSource[8] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+static const unsigned long CzTogglePressDebounceMs = 900;
+
+static bool CzHasPendingToggleRelease() {
+  for (uint8_t i = 0; i < 8; i++) {
+    if (CzToggleAwaitRelease[i]) {
+      return true;
+    }
+  }
+  return false;
+}
 
 static uint8_t GetCZoneReplyDestination() {
   return (CzLastRequester == 255) ? 255 : CzLastRequester;
@@ -119,19 +137,13 @@ static inline bool IsCZoneReleaseFrame(uint8_t iState) {
 
 static void SendCZoneMsgWithMirroredHeader(const tN2kMsg &msg) {
   NMEA2000.SendMsg(msg);
-  if (msg.DataLen < 2) return;
-
-  const uint16_t altHeader = (CzTxHeader == CZoneMessage) ? CZoneMessageAlt : CZoneMessage;
-  tN2kMsg mirror = msg;
-  mirror.Data[0] = (uint8_t)(altHeader & 0xFF);
-  mirror.Data[1] = (uint8_t)((altHeader >> 8) & 0xFF);
-  NMEA2000.SendMsg(mirror);
 }
 
 // Forward declarations for local helpers
 static void SetChangeSwitchState_CZ(uint8_t SwitchIndex, bool ItemStatus);
 static void SetCZoneSwitchState127501_CZ(unsigned char DeviceInstance);
 static void SetCZoneSwitchChangeRequest127502_CZ(unsigned char DeviceInstance, uint8_t SwitchIndex, bool ItemStatus);
+static void SetCZoneSwitchFeedback65281_CZ(const tN2kMsg &rxMsg);
 static void SetCZoneSwitchChangeAck65283_CZ(unsigned char CzSwitchBankSerialNum);
 static void SetCZoneSwitchHeartbeat65284_CZ(unsigned char CzSwitchBankSerialNum);
 static void SetCZoneSendConfigToMFD65290_CZ(unsigned char CzSwitchBankSerial, uint8_t CZoneConfig0, uint8_t CZoneConfig1, uint8_t CZoneConfig2);
@@ -160,8 +172,11 @@ void CZone_Loop() {
   // otherwise the relay state and the MFD display would stay out of sync indefinitely.
   if (CzAckPending && (long)(now - CzAckPendingSince) >= (long)CzAckPendingTimeoutMs) {
     CzAckPending = false;
+    if (CzAckPendingSwitchIdx < 8) {
+      CzToggleAwaitRelease[CzAckPendingSwitchIdx] = false;
+    }
+    CzAckPendingSwitchIdx = 0xFF;
     SetCZoneSwitchChangeAck65283_CZ(CzSwitchBank1SerialNum);
-    SetCZoneSwitchHeartbeat65284_CZ(CzSwitchBank1SerialNum);
   }
 
   // Only announce config/claim in a short request-triggered window to avoid UI churn on CZ pages.
@@ -223,6 +238,15 @@ bool CZone_HandleMsg(const tN2kMsg &msg) {
   switch (msg.PGN) {
     case 65280UL: // MFD -> switch change
       {
+        if (msg.Source == NodeAddress) {
+          // Never consume own echoed traffic as command input.
+          return true;
+        }
+        const bool isBroadcast = (msg.Destination == 0 || msg.Destination == 255);
+        if (msg.Destination != NodeAddress && !isBroadcast) {
+          // Ignore CZone switch commands not addressed to this node.
+          return false;
+        }
         int idx = 0;
         const uint16_t hdr = msg.Get2ByteUInt(idx);
         if (hdr != CZoneMessage && hdr != CZoneMessageAlt) {
@@ -241,15 +265,31 @@ bool CZone_HandleMsg(const tN2kMsg &msg) {
         if (iState == 0xF1 || iState == 0xF2 || iState == 0x41 || iState == 0x42 || iState == 0x40 ||
             (iState >= 0x71 && iState <= 0x7F) || iState == 0x62 ||
             iState == 0x02 || iState == 0x03) {
+          // Acknowledge SS command frame so MFD does not keep retransmitting it.
+          SetCZoneSwitchFeedback65281_CZ(msg);
           const uint8_t bit2 = msg.Data[2];
           const uint8_t bit3 = msg.Data[3];
           const uint8_t bankFromMsg = msg.Data[5];
           uint8_t bit = 0;
 
-          // Learn active bank serial from commands sent by MFD (commonly in b5).
-          if (bankFromMsg != 0x00 && bankFromMsg != 0xFF && bankFromMsg != CzSwitchBank1SerialNum) {
-            if (N2kDebug) Serial.printf("CZone: learn bank serial old=%u new=%u\n", (unsigned)CzSwitchBank1SerialNum, (unsigned)bankFromMsg);
-            CzSwitchBank1SerialNum = bankFromMsg;
+          // Learn the bank serial once, then ignore commands for other banks.
+          if (bankFromMsg != 0x00 && bankFromMsg != 0xFF) {
+            if (!CzBankSerialLocked) {
+              if (N2kDebug) {
+                Serial.printf("CZone: lock bank serial to %u (was %u)\n",
+                              (unsigned)bankFromMsg,
+                              (unsigned)CzSwitchBank1SerialNum);
+              }
+              CzSwitchBank1SerialNum = bankFromMsg;
+              CzBankSerialLocked = true;
+            } else if (bankFromMsg != CzSwitchBank1SerialNum) {
+              if (N2kDebug) {
+                Serial.printf("CZone 65280 ignore foreign bank=%u expected=%u\n",
+                              (unsigned)bankFromMsg,
+                              (unsigned)CzSwitchBank1SerialNum);
+              }
+              return true;
+            }
           }
 
           // Vulcan variant (header 0x9913): prefer b3 as legacy switch code (0x05..0x0C).
@@ -288,6 +328,46 @@ bool CZone_HandleMsg(const tN2kMsg &msg) {
           bool ignoreSwitchCommand = false;
           bool doToggle = false;
           const uint8_t b7 = msg.Data[7];
+          const bool isTogglePress = IsCZoneTogglePress(iState, b7);
+          const bool isToggleRelease = (iState == 0x62 || iState == 0x42 || IsCZoneToggleRelease(iState, b7));
+
+          if (isTogglePress) {
+            const unsigned long nowMs = millis();
+            const bool sessionExpired = ((long)(nowMs - CzActiveToggleSourceLastMs) >= (long)CzToggleSourceSessionTimeoutMs);
+            if (CzActiveToggleSource == 0xFF) {
+              CzActiveToggleSource = msg.Source;
+            } else if (msg.Source != CzActiveToggleSource) {
+              // Allow source handover only after an idle timeout and with a clean state.
+              if (sessionExpired && !CzAckPending && !CzHasPendingToggleRelease()) {
+                if (N2kDebug) {
+                  Serial.printf("CZone 65280 rebind toggle source=%u old=%u\n",
+                                (unsigned)msg.Source,
+                                (unsigned)CzActiveToggleSource);
+                }
+                CzActiveToggleSource = msg.Source;
+              } else {
+                if (N2kDebug) {
+                  Serial.printf("CZone 65280 ignore foreign toggle source=%u active=%u\n",
+                                (unsigned)msg.Source,
+                                (unsigned)CzActiveToggleSource);
+                }
+                return true;
+              }
+            }
+            CzActiveToggleSourceLastMs = nowMs;
+          } else if (isToggleRelease) {
+            // Release frames must come from the same active source.
+            if (CzActiveToggleSource != 0xFF && msg.Source != CzActiveToggleSource) {
+              if (N2kDebug) {
+                Serial.printf("CZone 65280 ignore foreign release source=%u active=%u\n",
+                              (unsigned)msg.Source,
+                              (unsigned)CzActiveToggleSource);
+              }
+              return true;
+            }
+            CzActiveToggleSourceLastMs = millis();
+          }
+
           if (IsCZoneAbsOn(iState)) {
             // Common ON encodings seen on CZone pages (Momentary-style absolute ON).
             handleAbs = true;
@@ -295,13 +375,6 @@ bool CZone_HandleMsg(const tN2kMsg &msg) {
           } else if (IsCZoneTogglePress(iState, b7)) {
             // "Single Throw Latching" tap on B&G Vulcan (Output Function "On/Off" or "Toggle"):
             // one tap toggles the relay state. Always paired with b7=0x08 in this mode.
-            // Confirmed by log: the MFD alternates between 0x71 and 0x72 as the press code
-            // on successive taps (likely an internal sequence/toggle bit in the protocol).
-            // Accept the whole 0x71-0x7F band defensively in case the MFD cycles through
-            // further values - all must be treated identically as "toggle", otherwise some
-            // taps would be silently dropped. Each press is immediately followed by a
-            // release frame (0x62 or 0x40 depending on Output Function setting - both
-            // handled as ignore below via the b7==0x08 marker).
             doToggle = true;
           } else if (IsCZoneToggleRange(iState)) {
             // 0x7x without the Latching marker is treated as non-switch traffic.
@@ -325,22 +398,9 @@ bool CZone_HandleMsg(const tN2kMsg &msg) {
             // would toggle twice (once on press, once on release).
             ignoreSwitchCommand = true;
           } else if (iState == 0x02 || iState == 0x03) {
-            if (hdr == CZoneMessageAlt) {
-              // 0x9913 with 0x02/0x03 appears periodically as display sync on Vulcan.
-              // Do not actuate relays from these frames to avoid auto-retrigger after local OFF.
-              ignoreSwitchCommand = true;
-            } else {
-              // On non-0x9913 variants still allow explicit absolute state from b4/b5 if present.
-              const uint8_t b4 = msg.Data[4];
-              const uint8_t b5 = msg.Data[5];
-              if (b4 <= 0x01) {
-                handleAbs = true;
-                absOut = (b4 == 0x01);
-              } else if (b5 <= 0x01) {
-                handleAbs = true;
-                absOut = (b5 == 0x01);
-              }
-            }
+            // 0x02/0x03 appears as periodic sync/status chatter on Vulcan variants.
+            // Never actuate relays from these frames.
+            ignoreSwitchCommand = true;
           }
 
           if (N2kDebug) {
@@ -359,15 +419,26 @@ bool CZone_HandleMsg(const tN2kMsg &msg) {
             // is the right moment to send it - the MFD has now seen the full press/release
             // cycle and should accept the status update without re-triggering its own toggle.
             const bool isReleaseFrame = IsCZoneReleaseFrame(iState);
+            const uint8_t toggleIdx = (switchIndex > 0) ? (uint8_t)(switchIndex - 1) : 0;
+            if (isReleaseFrame && toggleIdx < 8) {
+              CzToggleAwaitRelease[toggleIdx] = false;
+            }
             if (isReleaseFrame && CzAckPending) {
               CzAckPending = false;
+              CzAckPendingSwitchIdx = 0xFF;
               SetCZoneSwitchChangeAck65283_CZ(CzSwitchBank1SerialNum);
-              SetCZoneSwitchHeartbeat65284_CZ(CzSwitchBank1SerialNum);
+            }
+            if (isReleaseFrame) {
+              CzActiveToggleSource = 0xFF;
             }
             return true;
           }
 
           if (handleAbs) {
+            const uint8_t toggleIdx = (switchIndex > 0) ? (uint8_t)(switchIndex - 1) : 0;
+            if (toggleIdx < 8) {
+              CzToggleAwaitRelease[toggleIdx] = false;
+            }
             if (absOut) {
               *state |= mask;
               *syncState |= mask;
@@ -377,8 +448,31 @@ bool CZone_HandleMsg(const tN2kMsg &msg) {
             }
             SetChangeSwitchState_CZ(switchIndex, absOut);
             SetCZoneSwitchChangeAck65283_CZ(CzSwitchBank1SerialNum);
-            SetCZoneSwitchHeartbeat65284_CZ(CzSwitchBank1SerialNum);
           } else if (doToggle) {
+            const uint8_t toggleIdx = (switchIndex > 0) ? (uint8_t)(switchIndex - 1) : 0;
+            if (toggleIdx < 8 && CzToggleAwaitRelease[toggleIdx]) {
+              if (N2kDebug) {
+                Serial.printf("CZone 65280 ignore press-before-release sw=%u iState=%02X\n",
+                              (unsigned)switchIndex,
+                              iState);
+              }
+              return true;
+            }
+            if (toggleIdx < 8) {
+              const unsigned long nowMs = millis();
+              if (CzLastTogglePressSource[toggleIdx] == msg.Source &&
+                  (long)(nowMs - CzLastTogglePressMs[toggleIdx]) < (long)CzTogglePressDebounceMs) {
+                if (N2kDebug) {
+                  Serial.printf("CZone 65280 ignore duplicate press sw=%u iState=%02X dt=%lu\n",
+                                (unsigned)switchIndex,
+                                iState,
+                                (unsigned long)(nowMs - CzLastTogglePressMs[toggleIdx]));
+                }
+                return true;
+              }
+              CzLastTogglePressSource[toggleIdx] = msg.Source;
+              CzLastTogglePressMs[toggleIdx] = nowMs;
+            }
             // Switch the relay immediately, but defer the ack/status broadcast until the
             // matching release frame (0x40/0x62/0x42) arrives - see CzAckPending above.
             *state ^= mask;
@@ -391,7 +485,11 @@ bool CZone_HandleMsg(const tN2kMsg &msg) {
               if ((*syncState & mask) != 0) CzMfdDisplaySyncState1 |= mask;
               else CzMfdDisplaySyncState1 &= ~mask;
             }
+            if (toggleIdx < 8) {
+              CzToggleAwaitRelease[toggleIdx] = true;
+            }
             CzAckPending = true;
+            CzAckPendingSwitchIdx = toggleIdx;
             CzAckPendingSince = millis();
           } else {
             // Unsupported/unknown command state: never toggle as fallback.
@@ -629,16 +727,7 @@ bool CZone_HandleMsg(const tN2kMsg &msg) {
         CzLastRequester = msg.Source;
         LearnCZoneHeader(hdr);
         CzConfigAuthenticated = true;
-        const unsigned long now = millis();
-        const bool stateChanged =
-          (CzSwitchState1 != CzLastReportedState1) ||
-          (CzSwitchState2 != CzLastReportedState2);
-        const bool keepaliveDue =
-          (long)(now - CzLast65288ResponseMs) >= (long)Cz65288ResponseMinIntervalMs;
-        if (stateChanged || keepaliveDue) {
-          CzLast65288ResponseMs = now;
-          SetCZoneSwitchHeartbeat65284_CZ(CzSwitchBank1SerialNum);
-        }
+        SetCZoneSwitchHeartbeat65284_CZ(CzSwitchBank1SerialNum);
         return true;
       }
       break;
@@ -678,8 +767,6 @@ static void SetChangeSwitchState_CZ(uint8_t SwitchIndex, bool ItemStatus) {
   }
   // notify network only after boot-block to avoid noisy startup bus actions
   if (millis() > BootBlockUntil) {
-    SetCZoneSwitchState127501_CZ(BinaryDeviceInstance);
-    SetCZoneSwitchChangeRequest127502_CZ(SwitchBankInstance, SwitchIndex, ItemStatus);
   }
 }
 
@@ -715,6 +802,19 @@ static void SetCZoneSwitchChangeRequest127502_CZ(unsigned char DeviceInstance, u
   SendCZoneMsgWithMirroredHeader(N2kMsg);
 }
 
+static void SetCZoneSwitchFeedback65281_CZ(const tN2kMsg &rxMsg) {
+  if (rxMsg.DataLen < 8) return;
+
+  tN2kMsg out;
+  out.SetPGN(65281L);
+  out.Priority = 7;
+  out.Destination = rxMsg.Source;
+  for (uint8_t i = 0; i < 8; i++) {
+    out.AddByte(rxMsg.Data[i]);
+  }
+  NMEA2000.SendMsg(out);
+}
+
 static void SetCZoneSwitchChangeAck65283_CZ(unsigned char CzSwitchBankSerialNum) {
   tN2kMsg N2kMsg;
   if (N2kDebug) Serial.printf("CZone TX 65283 bank=%u sync1=%02X sync2=%02X\n",
@@ -740,6 +840,13 @@ static void SetCZoneSwitchHeartbeat65284_CZ(unsigned char CzSwitchBankSerialNum)
     (unsigned)CzSwitchBankSerialNum,
     CzSwitchState1,
     CzSwitchState2);
+  uint32_t channelBits = 0;
+  if (CzSwitchBankSerialNum == CzSwitchBank1SerialNum) {
+    channelBits = (uint32_t)CzSwitchState1;
+  } else {
+    channelBits = (uint32_t)CzSwitchState2;
+  }
+
   N2kMsg.SetPGN(65284L);
   N2kMsg.Priority = 7;
   N2kMsg.Add2ByteUInt(CzTxHeader);
@@ -747,11 +854,9 @@ static void SetCZoneSwitchHeartbeat65284_CZ(unsigned char CzSwitchBankSerialNum)
   N2kMsg.AddByte(CzSwitchBankSerialNum);
   // Switch summary field identifier (Contact 6 Plus / N2kCZone parser): 0x1E
   N2kMsg.AddByte(0x1e);
-  if (CzSwitchBankSerialNum == CzSwitchBank1SerialNum)
-    N2kMsg.AddByte(CzSwitchState1);
-  else N2kMsg.AddByte(CzSwitchState2);
-  N2kMsg.Add2ByteUInt(0x0000);
-  N2kMsg.AddByte(0x00);
+  // CZone module status payload uses a 32-bit channel bitfield.
+  // Using full bitfield avoids ambiguous 1-byte status encoding.
+  N2kMsg.Add4ByteUInt(channelBits);
   SendCZoneMsgWithMirroredHeader(N2kMsg);
 
   if (CzSwitchBankSerialNum == CzSwitchBank1SerialNum) CzLastReportedState1 = CzSwitchState1;

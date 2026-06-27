@@ -79,6 +79,18 @@ void HandleNMEA2000Msg(const tN2kMsg &N2kMsg) {
     return;
   }
 
+#if ENABLE_CZONE
+  // In CZone mode, relay control must come from the CZone parser only.
+  // Processing standard 127502/126208 commands in parallel can create
+  // competing command loops on some MFDs (observed as repeated toggling).
+  if (N2kMsg.PGN == 127502L || N2kMsg.PGN == 126208L) {
+    if (N2kDebug) {
+      Serial.printf("Ignore standard control PGN %lu while CZone is active\n", N2kMsg.PGN);
+    }
+    return;
+  }
+#endif
+
   // Direct Switch Bank Control (PGN 127502)
   if (N2kMsg.PGN == 127502L) {
     unsigned char TargetBankInstance = 0;
@@ -98,9 +110,9 @@ void HandleNMEA2000Msg(const tN2kMsg &N2kMsg) {
         bool on2 = (s2 == N2kOnOff_On);
       bool on3 = (s3 == N2kOnOff_On) || (s3Legacy == N2kOnOff_On);
 
-        digitalWrite(Relais[0], on1 ? HIGH : LOW);
-        digitalWrite(Relais[1], on2 ? HIGH : LOW);
-        digitalWrite(Relais[2], on3 ? HIGH : LOW);
+        SetRelayLogical(0, on1);
+        SetRelayLogical(1, on2);
+        SetRelayLogical(2, on3);
         // Update status vars and send an immediate status report
         Rel1Status = GetRelayLogicalState(0);
         Rel2Status = GetRelayLogicalState(1);
@@ -136,17 +148,17 @@ void HandleNMEA2000Msg(const tN2kMsg &N2kMsg) {
               // Field 1 = Bank Instance (skip), Felder 2..4 = Switch 1..3 Status in beiden PGNs
               if (FieldNo >= 2 && FieldNo <= 4) {
                 bool on = (FieldValue != 0);
-                digitalWrite(Relais[FieldNo - 2], on ? HIGH : LOW);
+                SetRelayLogical(FieldNo - 2, on);
               } else if (FieldNo >= 1 && FieldNo <= 3) {
                 // Fallback fuer Stacks, die wie urspruenglich ab Feld 1 zaehlen
                 bool on = (FieldValue != 0);
-                digitalWrite(Relais[FieldNo - 1], on ? HIGH : LOW);
+                SetRelayLogical(FieldNo - 1, on);
               }
             }
             // Update status vars and send an immediate status report
-            Rel1Status = digitalRead(Relais[0]);
-            Rel2Status = digitalRead(Relais[1]);
-            Rel3Status = digitalRead(Relais[2]);
+            Rel1Status = GetRelayLogicalState(0);
+            Rel2Status = GetRelayLogicalState(1);
+            Rel3Status = GetRelayLogicalState(2);
             SendN2kSwitchBankStatus(Rel1Status, Rel2Status, Rel3Status);
             if (N2kDebug) {
               Serial.printf("GroupFunction Command auf PGN %lu verarbeitet\n", PGNForGroupFunction);
@@ -393,48 +405,7 @@ void CheckSourceAddressChange() {
 }
 /************************************ Loop ***********************************/
 void loop() {
-  static unsigned long lastSwitchControlAnnounce = 0;
-  static int8_t lastCtrlR1 = -1;
-  static int8_t lastCtrlR2 = -1;
-  static int8_t lastCtrlR3 = -1;
-
   SendN2kSwitchBankStatus(Rel1Status, Rel2Status, Rel3Status);
-
-  // Compatibility: announce PGN127502 only on state changes plus sparse keepalive.
-  // Sending command PGN cyclically can create feedback loops on some MFDs.
-  const bool r1Now = GetRelayLogicalState(0);
-  const bool r2Now = GetRelayLogicalState(1);
-  const bool r3Now = GetRelayLogicalState(2);
-  const bool ctrlStateChanged =
-    (lastCtrlR1 < 0) ||
-    (lastCtrlR1 != (int8_t)(r1Now ? 1 : 0)) ||
-    (lastCtrlR2 != (int8_t)(r2Now ? 1 : 0)) ||
-    (lastCtrlR3 != (int8_t)(r3Now ? 1 : 0));
-
-  if (ctrlStateChanged) {
-    tN2kBinaryStatus controlBankStatus;
-    tN2kMsg controlMsg;
-
-    lastSwitchControlAnnounce = millis();
-
-    Rel1Status = r1Now;
-    Rel2Status = r2Now;
-    Rel3Status = r3Now;
-
-    N2kResetBinaryStatus(controlBankStatus);
-    const uint8_t placeholderSlot = (N2K_THIRD_SWITCH_ITEM == 4) ? 3 : 4;
-    N2kSetStatusBinaryOnStatus(controlBankStatus, Rel1Status ? N2kOnOff_On : N2kOnOff_Off, 1);
-    N2kSetStatusBinaryOnStatus(controlBankStatus, Rel2Status ? N2kOnOff_On : N2kOnOff_Off, 2);
-    N2kSetStatusBinaryOnStatus(controlBankStatus, Rel3Status ? N2kOnOff_On : N2kOnOff_Off, N2K_THIRD_SWITCH_ITEM);
-    N2kSetStatusBinaryOnStatus(controlBankStatus, N2kOnOff_Unavailable, placeholderSlot);
-
-    SetN2kSwitchBankCommand(controlMsg, 0, controlBankStatus);
-    NMEA2000.SendMsg(controlMsg);
-
-    lastCtrlR1 = Rel1Status ? 1 : 0;
-    lastCtrlR2 = Rel2Status ? 1 : 0;
-    lastCtrlR3 = Rel3Status ? 1 : 0;
-  }
 
   NMEA2000.ParseMessages();
   CZone_Loop();
