@@ -6,7 +6,7 @@
 [![OBP](https://img.shields.io/badge/Sailing_with-OpenBoatsProjects-blue)](https://open-boat-projects.org/de/)
 
 ## Description
-This repository shows how to switch 3 relais from Chartplotter with CZone Support and also with the website support.
+This repository shows how to switch 3 relais (je 4A max with 2x2A contacts) from Chartplotter with CZone Support and also with the website support.
 - Switching Relais Aktor
 
 and send it as NNMEA2000 meassage.
