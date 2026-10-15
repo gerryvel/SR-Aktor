@@ -103,7 +103,8 @@ String replaceVariable(const String& var)
     if (var == "sAP_Clients") return String(sAP_Station);
     if (var == "sCL_Addr") return WiFi.localIP().toString();
     if (var == "sCL_Status") return String(sCL_Status);
-    if (var == "sVersion") return VersionSoftware;
+    if (var == "sVersionSoftware") return VersionSoftware;
+    if (var == "sVersionHardware") return VersionHardware;
     if (var == "CONFIGPLACEHOLDER") return processor(var);
     if (var == "BUTTONPLACEHOLDER") return SwitchRelais(var);
     return "NoVariable";
